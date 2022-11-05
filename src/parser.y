@@ -79,3 +79,7 @@ definitions: /* empty */ {
 definition: /* TODO */
 
 %%
+
+void pyrite::Parser::error(const pyrite::Parser::location_type& location, const std::string& message) {
+    throw PyriteException(message, location.begin.line, location.begin.column);
+}

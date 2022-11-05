@@ -9,7 +9,7 @@
 namespace pyrite {
 class Lexer {
 public:
-  Lexer(std::ifstream &file) : file(file) { location.initialize(); }
+  Lexer(std::ifstream &file) : file(file) { currentLocation.initialize(); }
 
   Parser::symbol_type nextToken();
 

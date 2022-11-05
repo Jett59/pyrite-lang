@@ -1,4 +1,5 @@
 #include "lexer.h"
+#include <functional>
 #include <optional>
 #include <utility>
 
@@ -38,7 +39,16 @@ void Lexer::unreadCharacter(char c) {
   }
 }
 
-using TokenConstructor = Parser::symbol_type (*)(location location);
+using TokenConstructor = std::function<Parser::symbol_type()>;
+
+template <typename Function>
+concept TokenConstructorFunction =
+    std::is_same_v<std::invoke_result_t<Function>, Parser::symbol_type>;
+
+// Quick sanity check: TokenConstructor is a TokenConstructorFunction.
+static_assert(TokenConstructorFunction<TokenConstructor>,
+              "Mismatch in TokenConstructorFunction (concept) and "
+              "TokenConstructor, which should always satisfy it.");
 
 // Annoying c++ doesn't allow passing string literals to templates properly.
 // This is because std::string has private members, so you can't pass it to a
@@ -54,23 +64,24 @@ template <size_t size> struct StringLiteral {
   char operator[](size_t index) const { return data[index]; }
 };
 
-using TokenRule = std::optional<Parser::symbol_type> (*)(Lexer &lexer,
-                                                         location &location);
+using TokenRule = std::optional<TokenConstructor> (*)(Lexer &lexer,
+                                                      location &location);
 
-template <TokenConstructor tokenConstructor, StringLiteral string>
-std::optional<Parser::symbol_type> basicTokenRule(Lexer &lexer,
-                                                  location &location) {
+template <TokenConstructorFunction tokenConstructor, StringLiteral string>
+std::optional<TokenConstructor> basicTokenRule(Lexer &lexer,
+                                               location &location) {
   for (char c : string.data) {
     if (lexer.nextCharacter() != c) {
       lexer.unreadCharacter(c);
       return std::nullopt;
     }
   }
-  return tokenConstructor(location);
+  auto tokenLocation = location;
+  return [=] { return tokenConstructor(tokenLocation); };
 }
 
-std::optional<Parser::symbol_type> identifierTokenRule(Lexer &lexer,
-                                                       location &location) {
+std::optional<TokenConstructor> identifierTokenRule(Lexer &lexer,
+                                                    location &location) {
   char c = lexer.nextCharacter();
   if (!isalpha(c) && c != '_') {
     lexer.unreadCharacter(c);
@@ -86,11 +97,12 @@ std::optional<Parser::symbol_type> identifierTokenRule(Lexer &lexer,
     }
     identifier += c;
   }
-  return Parser::make_IDENTIFIER(identifier, location);
+  auto tokenLocation = location;
+  return [=] { return Parser::make_IDENTIFIER(identifier, tokenLocation); };
 }
 
-std::optional<Parser::symbol_type> integerLiteralTokenRule(Lexer &lexer,
-                                                           location &location) {
+std::optional<TokenConstructor> integerLiteralTokenRule(Lexer &lexer,
+                                                        location &location) {
   char c = lexer.nextCharacter();
   if (!isdigit(c)) {
     lexer.unreadCharacter(c);
@@ -106,11 +118,15 @@ std::optional<Parser::symbol_type> integerLiteralTokenRule(Lexer &lexer,
     }
     integerLiteral += c;
   }
-  return Parser::make_INTEGER_LITERAL(std::stoll(integerLiteral), location);
+  auto tokenLocation = location;
+  return [=] {
+    return Parser::make_INTEGER_LITERAL(std::stoll(integerLiteral),
+                                        tokenLocation);
+  };
 }
 
-std::optional<Parser::symbol_type> stringLiteralTokenRule(Lexer &lexer,
-                                                          location &location) {
+std::optional<TokenConstructor> stringLiteralTokenRule(Lexer &lexer,
+                                                       location &location) {
   char c = lexer.nextCharacter();
   if (c != '"') {
     lexer.unreadCharacter(c);
@@ -129,7 +145,9 @@ std::optional<Parser::symbol_type> stringLiteralTokenRule(Lexer &lexer,
     }
     stringLiteral += c;
   }
-  return Parser::make_STRING_LITERAL(stringLiteral, location);
+  auto tokenLocation = location;
+  return
+      [=] { return Parser::make_STRING_LITERAL(stringLiteral, tokenLocation); };
 }
 
 static TokenRule tokenRules[] = {
@@ -147,16 +165,16 @@ Parser::symbol_type Lexer::nextToken() {
     }
     unreadCharacter(lastCharacter);
   }
-  std::vector<std::pair<Parser::symbol_type, location>> possibleTokens;
+  std::vector<std::pair<TokenConstructor, location>> possibleTokens;
   // Reverse the end and begin of the location so the end of the last token is
   // the begin of the new one.
   currentLocation.begin = currentLocation.end;
   location originalLocation = currentLocation;
   size_t originalBufferIndex = bufferIndex;
   for (const auto &tokenRule : tokenRules) {
-    auto token = tokenRule(*this, currentLocation);
-    if (token) {
-      possibleTokens.push_back({*token, currentLocation});
+    auto tokenConstructor = tokenRule(*this, currentLocation);
+    if (tokenConstructor) {
+      possibleTokens.push_back({std::move(*tokenConstructor), currentLocation});
     }
     currentLocation = originalLocation;
     bufferIndex = originalBufferIndex;
@@ -180,7 +198,8 @@ Parser::symbol_type Lexer::nextToken() {
         bestLocation = &matchLocation;
       }
     }
-    return bestMatch->first;
+    currentLocation = *bestLocation;
+    return bestMatch->first();
   }
 }
 

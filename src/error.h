@@ -4,14 +4,18 @@
 #include <string>
 
 namespace pyrite {
-class PyriteError {
+class PyriteException {
 public:
-  PyriteError(std::string message) : message(std::move(message)) {}
+  PyriteException(std::string message, size_t line, size_t column)
+      : message(std::move(message)), line(line), column(column) {}
 
-  const std::string &getMessage() const { return message; }
+  std::string getMessage() const {
+    return std::to_string(line) + ":" + std::to_string(column) + ": " + message;
+  }
 
 private:
   std::string message;
+  size_t line, column;
 };
 } // namespace pyrite
 
