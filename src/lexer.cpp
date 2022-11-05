@@ -67,7 +67,13 @@ template <size_t size> struct StringLiteral {
 using TokenRule = std::optional<TokenConstructor> (*)(Lexer &lexer,
                                                       location &location);
 
-template <TokenConstructorFunction tokenConstructor, StringLiteral string>
+template <typename Function>
+concept TokenConstructorWithLocationFunction =
+    std::is_same_v<std::invoke_result_t<Function, location &>,
+                   TokenConstructor>;
+
+template <TokenConstructorWithLocationFunction tokenConstructor,
+          StringLiteral string>
 std::optional<TokenConstructor> basicTokenRule(Lexer &lexer,
                                                location &location) {
   for (char c : string.data) {
