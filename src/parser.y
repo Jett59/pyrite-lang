@@ -76,7 +76,7 @@ definitions: /* empty */ {
     $$ = std::move(list);
 }
 
-definition: /* TODO */
+definition: IDENTIFIER {}
 
 %%
 

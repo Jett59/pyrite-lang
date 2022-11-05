@@ -19,7 +19,7 @@ char Lexer::nextCharacter() {
   }
   if (c == '\n') {
     currentLocation.end.line++;
-    currentLocation.end.column = 0;
+    currentLocation.end.column = 1;
   } else {
     currentLocation.end.column++;
   }
@@ -33,7 +33,7 @@ void Lexer::unreadCharacter(char c) {
   }
   if (c == '\n') {
     currentLocation.end.line--;
-    currentLocation.end.column = 0;
+    currentLocation.end.column = 1;
   } else {
     currentLocation.end.column--;
   }
@@ -162,16 +162,24 @@ static TokenRule tokenRules[] = {
     stringLiteralTokenRule,
 };
 
+struct TokenMatch {
+  TokenConstructor tokenConstructor;
+  location tokenLocation;
+  size_t finalBufferIndex;
+};
+
 Parser::symbol_type Lexer::nextToken() {
   // Skip all whitespace characters.
   {
     char lastCharacter;
-    while (isspace(lastCharacter = nextCharacter())) {
-      // Do nothing.
-    }
+    do {
+      if (file.eof()) {
+        return Parser::make_YYEOF(currentLocation);
+      }
+    } while (isspace(lastCharacter = nextCharacter()));
     unreadCharacter(lastCharacter);
   }
-  std::vector<std::pair<TokenConstructor, location>> possibleTokens;
+  std::vector<TokenMatch> possibleTokens;
   // Reverse the end and begin of the location so the end of the last token is
   // the begin of the new one.
   currentLocation.begin = currentLocation.end;
@@ -180,7 +188,8 @@ Parser::symbol_type Lexer::nextToken() {
   for (const auto &tokenRule : tokenRules) {
     auto tokenConstructor = tokenRule(*this, currentLocation);
     if (tokenConstructor) {
-      possibleTokens.push_back({std::move(*tokenConstructor), currentLocation});
+      possibleTokens.push_back(
+          {std::move(*tokenConstructor), currentLocation, bufferIndex});
     }
     currentLocation = originalLocation;
     bufferIndex = originalBufferIndex;
@@ -194,19 +203,16 @@ Parser::symbol_type Lexer::nextToken() {
   } else {
     // Find the one which takes up the most characters.
     auto bestMatch = &possibleTokens[0];
-    auto bestLocation = &bestMatch->second;
+    auto bestBufferIndex = bufferIndex;
     for (auto &match : possibleTokens) {
-      auto &matchLocation = match.second;
-      if (matchLocation.end.line > bestLocation->end.line ||
-          (matchLocation.end.line == bestLocation->end.line &&
-           matchLocation.end.column > bestLocation->end.column)) {
+      if (match.finalBufferIndex > bestBufferIndex) {
         bestMatch = &match;
-        bestLocation = &matchLocation;
+        bestBufferIndex = match.finalBufferIndex;
       }
     }
-    currentLocation = *bestLocation;
-    return bestMatch->first();
+    currentLocation = bestMatch->tokenLocation;
+    bufferIndex = bestBufferIndex;
+    return bestMatch->tokenConstructor();
   }
 }
-
 } // namespace pyrite

@@ -1,3 +1,4 @@
+#include "error.h"
 #include "lexer.h"
 #include "parser.hh"
 #include <fstream>
@@ -71,10 +72,15 @@ int main(int argc, const char **argv) {
       std::cerr << "Could not open file: " << options.fileName << std::endl;
       return 1;
     }
-    Lexer lexer(file);
-    std::unique_ptr<AstNode> ast;
-    Parser parser(lexer, argv[0], &ast);
-    parser.parse();
+    try {
+      Lexer lexer(file);
+      std::unique_ptr<AstNode> ast;
+      Parser parser(lexer, argv[0], &ast);
+      parser.parse();
+    } catch (const PyriteException &exception) {
+      std::cerr << exception.getMessage() << std::endl;
+      return 1;
+    }
   }
   return 0;
 }
