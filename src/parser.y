@@ -52,9 +52,19 @@ using std::make_unique;
     @$.initialize(&fileName);
 }
 
-%token <std::string> IDENTIFIER STRING_LITERAL
-%token <int64_t> INTEGER_LITERAL
-%token <double> FLOAT_LITERAL
+%token <std::string> IDENTIFIER "identifier" STRING_LITERAL "string literal"
+%token <int64_t> INTEGER_LITERAL "integer literal"
+%token <double> FLOAT_LITERAL "float literal"
+
+%token I8 "i8" I16 "i16" I32 "i32" I64 "i64" U8 "u8" U16 "u16" U32 "u32" U64 "u64" F32 "f32" F64 "f64" BOOL "bool" CHAR "char" VOID "void"
+
+%token PLUS "+" MINUS "-" STAR "*" SLASH "/" PERCENT "%" AMPERSAND "&" PIPE "|" CARET "^" TILDE "~" BANG "!" EQUALS "=" LESS "<" GREATER ">" QUESTION "?" COLON ":" DOT "." COMMA "," SEMICOLON ";"
+
+%token EQUALS_EQUALS "==" BANG_EQUALS "!=" LESS_EQUALS "<=" GREATER_EQUALS ">=" PIPE_PIPE "||" AMPERSAND_AMPERSAND "&&" PLUS_PLUS "++" MINUS_MINUS "--" LESS_LESS "<<" GREATER_GREATER ">>"
+
+%token ARROW "->"
+
+%token PLUS_EQUALS "+=" MINUS_EQUALS "-=" STAR_EQUALS "*=" SLASH_EQUALS "/=" PERCENT_EQUALS "%=" AMPERSAND_EQUALS "&=" PIPE_EQUALS "|=" CARET_EQUALS "^=" LESS_LESS_EQUALS "<<=" GREATER_GREATER_EQUALS ">>="
 
 %start compilation-unit
 

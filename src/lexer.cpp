@@ -50,44 +50,32 @@ static_assert(TokenConstructorFunction<TokenConstructor>,
               "Mismatch in TokenConstructorFunction (concept) and "
               "TokenConstructor, which should always satisfy it.");
 
-// Annoying c++ doesn't allow passing string literals to templates properly.
-// This is because std::string has private members, so you can't pass it to a
-// template.
-// We can pass this helper struct though.
-template <size_t size> struct StringLiteral {
-  char data[size];
-  StringLiteral(const char (&str)[size]) {
-    for (size_t i = 0; i < size; i++) {
-      data[i] = str[i];
-    }
-  }
-  char operator[](size_t index) const { return data[index]; }
-};
-
-using TokenRule = std::optional<TokenConstructor> (*)(Lexer &lexer,
-                                                      location &location);
+using TokenRule =
+    std::function<std::optional<TokenConstructor>(Lexer &, location &)>;
 
 template <typename Function>
 concept TokenConstructorWithLocationFunction =
     std::is_same_v<std::invoke_result_t<Function, location &>,
-                   TokenConstructor>;
+                   Parser::symbol_type>;
 
-template <TokenConstructorWithLocationFunction tokenConstructor,
-          StringLiteral string>
-std::optional<TokenConstructor> basicTokenRule(Lexer &lexer,
-                                               location &location) {
-  for (char c : string.data) {
-    if (lexer.nextCharacter() != c) {
-      lexer.unreadCharacter(c);
-      return std::nullopt;
-    }
-  }
-  auto tokenLocation = location;
-  return [=] { return tokenConstructor(tokenLocation); };
+template <TokenConstructorWithLocationFunction TokenConstructorType>
+TokenRule basicTokenRule(TokenConstructorType tokenConstructor,
+                         std::string string) {
+  return
+      [=](Lexer &lexer, location &location) -> std::optional<TokenConstructor> {
+        for (char c : string) {
+          if (lexer.nextCharacter() != c) {
+            lexer.unreadCharacter(c);
+            return std::nullopt;
+          }
+        }
+        auto tokenLocation = location;
+        return [=] { return tokenConstructor(tokenLocation); };
+      };
 }
 
-std::optional<TokenConstructor> identifierTokenRule(Lexer &lexer,
-                                                    location &location) {
+static std::optional<TokenConstructor> identifierTokenRule(Lexer &lexer,
+                                                           location &location) {
   char c = lexer.nextCharacter();
   if (!isalpha(c) && c != '_') {
     lexer.unreadCharacter(c);
@@ -107,8 +95,8 @@ std::optional<TokenConstructor> identifierTokenRule(Lexer &lexer,
   return [=] { return Parser::make_IDENTIFIER(identifier, tokenLocation); };
 }
 
-std::optional<TokenConstructor> integerLiteralTokenRule(Lexer &lexer,
-                                                        location &location) {
+static std::optional<TokenConstructor>
+integerLiteralTokenRule(Lexer &lexer, location &location) {
   char c = lexer.nextCharacter();
   if (!isdigit(c)) {
     lexer.unreadCharacter(c);
@@ -131,8 +119,8 @@ std::optional<TokenConstructor> integerLiteralTokenRule(Lexer &lexer,
   };
 }
 
-std::optional<TokenConstructor> stringLiteralTokenRule(Lexer &lexer,
-                                                       location &location) {
+static std::optional<TokenConstructor>
+stringLiteralTokenRule(Lexer &lexer, location &location) {
   char c = lexer.nextCharacter();
   if (c != '"') {
     lexer.unreadCharacter(c);
@@ -157,9 +145,38 @@ std::optional<TokenConstructor> stringLiteralTokenRule(Lexer &lexer,
 }
 
 static TokenRule tokenRules[] = {
+    basicTokenRule(Parser::make_I8, "i8"),
+    basicTokenRule(Parser::make_I16, "i16"),
+    basicTokenRule(Parser::make_I32, "i32"),
+    basicTokenRule(Parser::make_I64, "i64"),
+    basicTokenRule(Parser::make_U8, "u8"),
+    basicTokenRule(Parser::make_U16, "u16"),
+    basicTokenRule(Parser::make_U32, "u32"),
+    basicTokenRule(Parser::make_U64, "u64"),
+    basicTokenRule(Parser::make_F32, "f32"),
+    basicTokenRule(Parser::make_F64, "f64"),
+    basicTokenRule(Parser::make_BOOL, "bool"),
+    basicTokenRule(Parser::make_CHAR, "char"),
+    basicTokenRule(Parser::make_VOID, "void"),
     identifierTokenRule,
     integerLiteralTokenRule,
     stringLiteralTokenRule,
+    basicTokenRule(Parser::make_PLUS, "+"),
+    basicTokenRule(Parser::make_MINUS, "-"),
+    basicTokenRule(Parser::make_STAR, "*"),
+    basicTokenRule(Parser::make_SLASH, "/"),
+    basicTokenRule(Parser::make_PERCENT, "%"),
+    basicTokenRule(Parser::make_AMPERSAND, "&"),
+    basicTokenRule(Parser::make_PIPE, "|"),
+    basicTokenRule(Parser::make_CARET, "^"),
+    basicTokenRule(Parser::make_TILDE, "~"),
+    basicTokenRule(Parser::make_EQUALS, "="),
+    basicTokenRule(Parser::make_BANG, "!"),
+    basicTokenRule(Parser::make_QUESTION, "?"),
+    basicTokenRule(Parser::make_COLON, ":"),
+    basicTokenRule(Parser::make_SEMICOLON, ";"),
+    basicTokenRule(Parser::make_COMMA, ","),
+    basicTokenRule(Parser::make_DOT, "."),
 };
 
 struct TokenMatch {
