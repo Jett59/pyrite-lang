@@ -17,8 +17,9 @@ enum class AstNodeType {
 class AstNode {
 public:
   AstNode(AstNodeType nodeType) : nodeType(nodeType) {}
+  virtual ~AstNode() = default;
 
-  AstNodeType getNodeType() { return nodeType; }
+  AstNodeType getNodeType() const { return nodeType; }
 
 private:
   AstNodeType nodeType;

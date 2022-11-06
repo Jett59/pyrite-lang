@@ -1,6 +1,7 @@
 #include "error.h"
 #include "lexer.h"
 #include "parser.hh"
+#include "type.h"
 #include <fstream>
 #include <iostream>
 #include <string>
