@@ -13,9 +13,9 @@ char Lexer::nextCharacter() {
       c = '\0';
     } else {
       file.get(c);
-      buffer += c;
-      bufferIndex++;
     }
+    buffer += c;
+    bufferIndex++;
   }
   if (c == '\n') {
     currentLocation.end.line++;
@@ -228,7 +228,8 @@ Parser::symbol_type Lexer::nextToken() {
       }
     }
     currentLocation = bestMatch->tokenLocation;
-    bufferIndex = bestBufferIndex;
+    buffer = buffer.substr(bestBufferIndex);
+    bufferIndex = 0;
     return bestMatch->tokenConstructor();
   }
 }

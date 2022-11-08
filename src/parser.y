@@ -58,6 +58,8 @@ using std::make_unique;
 
 %token I8 "i8" I16 "i16" I32 "i32" I64 "i64" U8 "u8" U16 "u16" U32 "u32" U64 "u64" F32 "f32" F64 "f64" BOOL "bool" CHAR "char" VOID "void"
 
+%token MUT "mut"
+
 %token PLUS "+" MINUS "-" STAR "*" SLASH "/" PERCENT "%" AMPERSAND "&" PIPE "|" CARET "^" TILDE "~" BANG "!" EQUALS "=" LESS "<" GREATER ">" QUESTION "?" COLON ":" DOT "." COMMA "," SEMICOLON ";"
 
 %token EQUALS_EQUALS "==" BANG_EQUALS "!=" LESS_EQUALS "<=" GREATER_EQUALS ">=" PIPE_PIPE "||" AMPERSAND_AMPERSAND "&&" PLUS_PLUS "++" MINUS_MINUS "--" LESS_LESS "<<" GREATER_GREATER ">>"
@@ -68,8 +70,10 @@ using std::make_unique;
 
 %start compilation-unit
 
-%type <std::unique_ptr<AstNode>> definition
+%type <std::unique_ptr<AstNode>> definition expression
 %type <std::vector<std::unique_ptr<AstNode>>> definitions
+
+%type <std::unique_ptr<Type>> type
 
 %%
 
@@ -86,7 +90,62 @@ definitions: /* empty */ {
     $$ = std::move(list);
 }
 
-definition: IDENTIFIER {}
+definition:
+type IDENTIFIER "=" expression ";" {
+    $$ = std::make_unique<VariableDefinitionNode>($1, $2, $4, false);
+}
+| "mut" type IDENTIFIER "=" expression ";" {
+    $$ = std::make_unique<VariableDefinitionNode>($2, $3, $5, true);
+}
+
+type:
+"i8" {
+    $$ = std::make_unique<IntegerType>(8, true);
+}
+| "i16" {
+    $$ = std::make_unique<IntegerType>(16, true);
+}
+| "i32" {
+    $$ = std::make_unique<IntegerType>(32, true);
+}
+| "i64" {
+    $$ = std::make_unique<IntegerType>(64, true);
+}
+| "u8" {
+    $$ = std::make_unique<IntegerType>(8, false);
+}
+| "u16" {
+    $$ = std::make_unique<IntegerType>(16, false);
+}
+| "u32" {
+    $$ = std::make_unique<IntegerType>(32, false);
+}
+| "u64" {
+    $$ = std::make_unique<IntegerType>(64, false);
+}
+| "f32" {
+    $$ = std::make_unique<FloatType>(32);
+}
+| "f64" {
+    $$ = std::make_unique<FloatType>(64);
+}
+| "bool" {
+    $$ = std::make_unique<BooleanType>();
+}
+| "char" {
+    $$ = std::make_unique<CharType>();
+}
+| "void" {
+    $$ = std::make_unique<VoidType>();
+}
+
+expression:
+INTEGER_LITERAL {
+    $$ = std::make_unique<IntegerLiteralNode>($1);
+}
+| FLOAT_LITERAL {
+    $$ = std::make_unique<FloatLiteralNode>($1);
+}
 
 %%
 

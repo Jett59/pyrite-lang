@@ -12,6 +12,8 @@ enum class TypeClass {
   VOID,
   INTEGER,
   FLOAT,
+  BOOLEAN,
+  CHAR,
   ARRAY,
   REFERENCE,
   FUNCTION,
@@ -28,6 +30,8 @@ class Type;
 class VoidType;
 class IntegerType;
 class FloatType;
+class BooleanType;
+class CharType;
 class ArrayType;
 class ReferenceType;
 class FunctionType;
@@ -44,6 +48,8 @@ public:
   virtual void Visit(const VoidType &type) = 0;
   virtual void Visit(const IntegerType &type) = 0;
   virtual void Visit(const FloatType &type) = 0;
+  virtual void Visit(const BooleanType &type) = 0;
+  virtual void visit(const CharType &type) = 0;
   virtual void Visit(const ArrayType &type) = 0;
   virtual void Visit(const ReferenceType &type) = 0;
   virtual void Visit(const FunctionType &type) = 0;
@@ -102,6 +108,18 @@ public:
 
 private:
   size_t bits;
+};
+class BooleanType : public Type {
+public:
+  BooleanType() : Type(TypeClass::BOOLEAN) {}
+
+  void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
+};
+class CharType : public Type {
+public:
+  CharType() : Type(TypeClass::CHAR) {}
+
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 };
 class ArrayType : public Type {
 public:
@@ -207,74 +225,70 @@ public:
 
   void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
 };
-// Check it has visitVoid, visitInteger, visitFloat, visitArray, visitReference,
-// visitFunction, visitStruct, visitUnion, visitEnum, visitIdentified, visitAny,
-// visitAuto and they all return the right type.
-template <typename Implementation, typename ValueType>
-concept TypeTransformVisitorImplementation =
-    requires(Implementation impl, const VoidType &voidType,
-             const IntegerType &integerType, const FloatType &floatType,
-             const ArrayType &arrayType, const ReferenceType &referenceType,
-             const FunctionType &functionType, const StructType &structType,
-             const UnionType &unionType, const EnumType &enumType,
-             const IdentifiedType &identifiedType, const AnyType &anyType,
-             const AutoType &autoType) {
-  { impl.visitVoid(voidType) } -> std::same_as<ValueType>;
-  { impl.visitInteger(integerType) } -> std::same_as<ValueType>;
-  { impl.visitFloat(floatType) } -> std::same_as<ValueType>;
-  { impl.visitArray(arrayType) } -> std::same_as<ValueType>;
-  { impl.visitReference(referenceType) } -> std::same_as<ValueType>;
-  { impl.visitFunction(functionType) } -> std::same_as<ValueType>;
-  { impl.visitStruct(structType) } -> std::same_as<ValueType>;
-  { impl.visitUnion(unionType) } -> std::same_as<ValueType>;
-  { impl.visitEnum(enumType) } -> std::same_as<ValueType>;
-  { impl.visitIdentified(identifiedType) } -> std::same_as<ValueType>;
-  { impl.visitAny(anyType) } -> std::same_as<ValueType>;
-  { impl.visitAuto(autoType) } -> std::same_as<ValueType>;
-};
 
-template <typename ValueType,
-          TypeTransformVisitorImplementation<ValueType> This>
+template <typename ValueType, typename This>
 class TypeTransformVisitor : public TypeVisitor {
+  static_assert(std::is_base_of_v<TypeTransformVisitor<ValueType, This>, This>,
+                "This must be a subclass of TypeTransformVisitor");
+  static_assert(!std::is_abstract_v<This>,
+                "Implementation of transformation visitor must be a concrete "
+                "class; did you forget to implement one of the methods?");
+
 public:
   ValueType visit(const Type &type) {
     type.accept(*this);
     return std::move(result);
   }
 
+  virtual ValueType visitVoid(const VoidType &type) = 0;
   void Visit(const VoidType &type) override {
     result = static_cast<This *>(this)->visitVoid(type);
   }
+  virtual ValueType visitInteger(const IntegerType &type) = 0;
   void Visit(const IntegerType &type) override {
     result = static_cast<This *>(this)->visitInteger(type);
   }
+  virtual ValueType visitFloat(const FloatType &type) = 0;
   void Visit(const FloatType &type) override {
     result = static_cast<This *>(this)->visitFloat(type);
   }
+  virtual ValueType visitBoolean(const BooleanType &type) = 0;
+  void Visit(const BooleanType &type) override {
+    result = static_cast<This *>(this)->visitBoolean(type);
+  }
+  virtual ValueType visitArray(const ArrayType &type) = 0;
   void Visit(const ArrayType &type) override {
     result = static_cast<This *>(this)->visitArray(type);
   }
+  virtual ValueType visitReference(const ReferenceType &type) = 0;
   void Visit(const ReferenceType &type) override {
     result = static_cast<This *>(this)->visitReference(type);
   }
+  virtual ValueType visitFunction(const FunctionType &type) = 0;
   void Visit(const FunctionType &type) override {
     result = static_cast<This *>(this)->visitFunction(type);
   }
+  virtual ValueType visitStruct(const StructType &type) = 0;
   void Visit(const StructType &type) override {
     result = static_cast<This *>(this)->visitStruct(type);
   }
+  virtual ValueType visitUnion(const UnionType &type) = 0;
   void Visit(const UnionType &type) override {
     result = static_cast<This *>(this)->visitUnion(type);
   }
+  virtual ValueType visitEnum(const EnumType &type) = 0;
   void Visit(const EnumType &type) override {
     result = static_cast<This *>(this)->visitEnum(type);
   }
+  virtual ValueType visitIdentified(const IdentifiedType &type) = 0;
   void Visit(const IdentifiedType &type) override {
     result = static_cast<This *>(this)->visitIdentified(type);
   }
+  virtual ValueType visitAny(const AnyType &type) = 0;
   void Visit(const AnyType &type) override {
     result = static_cast<This *>(this)->visitAny(type);
   }
+  virtual ValueType visitAuto(const AutoType &type) = 0;
   void Visit(const AutoType &type) override {
     result = static_cast<This *>(this)->visitAuto(type);
   }
@@ -282,6 +296,12 @@ public:
 private:
   ValueType result;
 };
+
+struct NameAndType {
+  std::string name;
+  std::unique_ptr<Type> type;
+};
+
 } // namespace pyrite
 
 #endif
