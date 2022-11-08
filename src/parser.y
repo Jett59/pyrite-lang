@@ -57,6 +57,7 @@ using std::make_unique;
 %token <double> FLOAT_LITERAL "float literal"
 
 %token I8 "i8" I16 "i16" I32 "i32" I64 "i64" U8 "u8" U16 "u16" U32 "u32" U64 "u64" F32 "f32" F64 "f64" BOOL "bool" CHAR "char" VOID "void"
+%token AUTO "auto" ANY "any"
 
 %token MUT "mut"
 
@@ -138,6 +139,12 @@ type:
 | "void" {
     $$ = std::make_unique<VoidType>();
 }
+| "auto" {
+    $$ = std::make_unique<AutoType>();
+}
+| "any" {
+    $$ = std::make_unique<AnyType>();
+}
 
 expression:
 INTEGER_LITERAL {
@@ -145,6 +152,9 @@ INTEGER_LITERAL {
 }
 | FLOAT_LITERAL {
     $$ = std::make_unique<FloatLiteralNode>($1);
+}
+| IDENTIFIER {
+    $$ = std::make_unique<VariableReferenceNode>($1);
 }
 
 %%

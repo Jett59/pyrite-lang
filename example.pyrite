@@ -1,1 +1,2 @@
-bool asdf = 1;
+auto thing = 7;
+any thingy = thing;
