@@ -69,12 +69,16 @@ using std::make_unique;
 
 %token PLUS_EQUALS "+=" MINUS_EQUALS "-=" STAR_EQUALS "*=" SLASH_EQUALS "/=" PERCENT_EQUALS "%=" AMPERSAND_EQUALS "&=" PIPE_EQUALS "|=" CARET_EQUALS "^=" LESS_LESS_EQUALS "<<=" GREATER_GREATER_EQUALS ">>="
 
+%token LEFT_PAREN "(" RIGHT_PAREN ")" LEFT_BRACE "{" RIGHT_BRACE "}" LEFT_BRACKET "[" RIGHT_BRACKET "]"
+
 %start compilation-unit
 
-%type <std::unique_ptr<AstNode>> definition expression
-%type <std::vector<std::unique_ptr<AstNode>>> definitions
+%type <std::unique_ptr<AstNode>> definition expression statement block-statement
+%type <std::vector<std::unique_ptr<AstNode>>> definitions statement-list
 
 %type <std::unique_ptr<Type>> type
+%type <NameAndType> name-and-type
+%type <std::vector<NameAndType>> name-and-type-list
 
 %%
 
@@ -87,7 +91,7 @@ definitions: /* empty */ {
 }
 | definitions definition {
     auto list = $1;
-    list.push_back(std::move($2));
+    list.push_back($2);
     $$ = std::move(list);
 }
 
@@ -97,6 +101,43 @@ type IDENTIFIER "=" expression ";" {
 }
 | "mut" type IDENTIFIER "=" expression ";" {
     $$ = std::make_unique<VariableDefinitionNode>($2, $3, $5, true);
+}
+| type IDENTIFIER "(" name-and-type-list ")" block-statement {
+    $$ = std::make_unique<FunctionDefinitionNode>($2, $4, $1, $6);
+}
+
+statement:
+definition
+| block-statement
+| expression ";"
+
+block-statement: "{" statement-list "}" {
+    $$ = std::make_unique<BlockStatementNode>($2);
+}
+
+statement-list: /* empty */ {
+    /* Bison default-initializes it automatically */
+}
+| statement-list statement {
+    auto list = $1;
+    list.push_back($2);
+    $$ = std::move(list);
+}
+
+name-and-type-list: /* empty */ {
+    /* Bison default-initializes it automatically */
+}
+| name-and-type {
+    $$.push_back($1);
+}
+| name-and-type-list "," name-and-type {
+    auto list = $1;
+    list.push_back($3);
+    $$ = std::move(list);
+}
+
+name-and-type: type IDENTIFIER {
+    $$ = NameAndType{$2, $1};
 }
 
 type:
@@ -144,6 +185,9 @@ type:
 }
 | "any" {
     $$ = std::make_unique<AnyType>();
+}
+| IDENTIFIER {
+    $$ = std::make_unique<IdentifiedType>($1);
 }
 
 expression:

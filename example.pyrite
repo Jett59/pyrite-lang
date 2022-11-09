@@ -1,2 +1,8 @@
-auto thing = 7;
-any thingy = thing;
+any thing = 42;
+i32 main(i32 argc) {
+    123;
+    i32 thingy = thing;
+    void func() {
+        42;
+    }
+}
