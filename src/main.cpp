@@ -48,12 +48,11 @@ static void help(std::string programFile) {
   std::cerr << "  -h, --help\t\tPrint this help message" << std::endl;
   std::cerr << "  -v, --version\t\tPrint version information" << std::endl;
 }
-#define MAJOR_VERSION 0
-#define MINOR_VERSION 1
-#define PATCH_VERSION 0
-#define CREATE_VERSION_STRING(MAJOR, MINOR, PATCH) #MAJOR "." #MINOR "." #PATCH
-#define VERSION_STRING                                                         \
-  CREATE_VERSION_STRING(MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION)
+#define MAJOR_VERSION "0"
+#define MINOR_VERSION "1"
+#define PATCH_VERSION "0"
+
+#define VERSION_STRING MAJOR_VERSION "." MINOR_VERSION "." PATCH_VERSION
 
 static void version() {
   std::cerr << "Pyrite version " << VERSION_STRING << std::endl;
