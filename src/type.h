@@ -226,14 +226,7 @@ public:
   void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
 };
 
-template <typename ValueType, typename This>
-class TypeTransformVisitor : public TypeVisitor {
-  static_assert(std::is_base_of_v<TypeTransformVisitor<ValueType, This>, This>,
-                "This must be a subclass of TypeTransformVisitor");
-  static_assert(!std::is_abstract_v<This>,
-                "Implementation of transformation visitor must be a concrete "
-                "class; did you forget to implement one of the methods?");
-
+template <typename ValueType> class TypeTransformVisitor : public TypeVisitor {
 public:
   ValueType visit(const Type &type) {
     type.accept(*this);
@@ -241,67 +234,50 @@ public:
   }
 
   virtual ValueType visitVoid(const VoidType &type) = 0;
-  void Visit(const VoidType &type) override {
-    result = static_cast<This *>(this)->visitVoid(type);
-  }
+  void Visit(const VoidType &type) override { result = visitVoid(type); }
   virtual ValueType visitInteger(const IntegerType &type) = 0;
-  void Visit(const IntegerType &type) override {
-    result = static_cast<This *>(this)->visitInteger(type);
-  }
+  void Visit(const IntegerType &type) override { result = visitInteger(type); }
   virtual ValueType visitFloat(const FloatType &type) = 0;
-  void Visit(const FloatType &type) override {
-    result = static_cast<This *>(this)->visitFloat(type);
-  }
+  void Visit(const FloatType &type) override { result = visitFloat(type); }
   virtual ValueType visitBoolean(const BooleanType &type) = 0;
-  void Visit(const BooleanType &type) override {
-    result = static_cast<This *>(this)->visitBoolean(type);
-  }
+  void Visit(const BooleanType &type) override { result = visitBoolean(type); }
   virtual ValueType visitArray(const ArrayType &type) = 0;
-  void Visit(const ArrayType &type) override {
-    result = static_cast<This *>(this)->visitArray(type);
-  }
+  void Visit(const ArrayType &type) override { result = visitArray(type); }
   virtual ValueType visitReference(const ReferenceType &type) = 0;
   void Visit(const ReferenceType &type) override {
-    result = static_cast<This *>(this)->visitReference(type);
+    result = visitReference(type);
   }
   virtual ValueType visitFunction(const FunctionType &type) = 0;
   void Visit(const FunctionType &type) override {
-    result = static_cast<This *>(this)->visitFunction(type);
+    result = visitFunction(type);
   }
   virtual ValueType visitStruct(const StructType &type) = 0;
-  void Visit(const StructType &type) override {
-    result = static_cast<This *>(this)->visitStruct(type);
-  }
+  void Visit(const StructType &type) override { result = visitStruct(type); }
   virtual ValueType visitUnion(const UnionType &type) = 0;
-  void Visit(const UnionType &type) override {
-    result = static_cast<This *>(this)->visitUnion(type);
-  }
+  void Visit(const UnionType &type) override { result = visitUnion(type); }
   virtual ValueType visitEnum(const EnumType &type) = 0;
-  void Visit(const EnumType &type) override {
-    result = static_cast<This *>(this)->visitEnum(type);
-  }
+  void Visit(const EnumType &type) override { result = visitEnum(type); }
   virtual ValueType visitIdentified(const IdentifiedType &type) = 0;
   void Visit(const IdentifiedType &type) override {
-    result = static_cast<This *>(this)->visitIdentified(type);
+    result = visitIdentified(type);
   }
   virtual ValueType visitAny(const AnyType &type) = 0;
-  void Visit(const AnyType &type) override {
-    result = static_cast<This *>(this)->visitAny(type);
-  }
+  void Visit(const AnyType &type) override { result = visitAny(type); }
   virtual ValueType visitAuto(const AutoType &type) = 0;
-  void Visit(const AutoType &type) override {
-    result = static_cast<This *>(this)->visitAuto(type);
-  }
+  void Visit(const AutoType &type) override { result = visitAuto(type); }
 
 private:
   ValueType result;
 };
+
+using TypeToTypeTransformVisitor = TypeTransformVisitor<std::unique_ptr<Type>>;
 
 struct NameAndType {
   std::string name;
   std::unique_ptr<Type> type;
 };
 
+std::unique_ptr<Type> cloneType(const Type &type);
 } // namespace pyrite
 
 #endif
