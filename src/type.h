@@ -45,20 +45,20 @@ class AutoType;
 class TypeVisitor {
 public:
   virtual ~TypeVisitor() = default;
-  virtual void Visit(const VoidType &type) = 0;
-  virtual void Visit(const IntegerType &type) = 0;
-  virtual void Visit(const FloatType &type) = 0;
-  virtual void Visit(const BooleanType &type) = 0;
-  virtual void visit(const CharType &type) = 0;
-  virtual void Visit(const ArrayType &type) = 0;
-  virtual void Visit(const ReferenceType &type) = 0;
-  virtual void Visit(const FunctionType &type) = 0;
-  virtual void Visit(const StructType &type) = 0;
-  virtual void Visit(const UnionType &type) = 0;
-  virtual void Visit(const EnumType &type) = 0;
-  virtual void Visit(const IdentifiedType &type) = 0;
-  virtual void Visit(const AnyType &type) = 0;
-  virtual void Visit(const AutoType &type) = 0;
+  virtual void visit(const VoidType &) = 0;
+  virtual void visit(const IntegerType &) = 0;
+  virtual void visit(const FloatType &) = 0;
+  virtual void visit(const BooleanType &) = 0;
+  virtual void visit(const CharType &) = 0;
+  virtual void visit(const ArrayType &) = 0;
+  virtual void visit(const ReferenceType &) = 0;
+  virtual void visit(const FunctionType &) = 0;
+  virtual void visit(const StructType &) = 0;
+  virtual void visit(const UnionType &) = 0;
+  virtual void visit(const EnumType &) = 0;
+  virtual void visit(const IdentifiedType &) = 0;
+  virtual void visit(const AnyType &) = 0;
+  virtual void visit(const AutoType &) = 0;
 };
 
 class Type {
@@ -82,7 +82,7 @@ class VoidType : public Type {
 public:
   VoidType() : Type(TypeClass::VOID) {}
 
-  void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 };
 class IntegerType : public Type {
 public:
@@ -90,9 +90,9 @@ public:
       : Type(TypeClass::INTEGER), bits(bits), isSigned(isSigned) {}
 
   size_t getBits() const { return bits; }
-  bool getIsSigned() const { return isSigned; }
+  bool getSigned() const { return isSigned; }
 
-  void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 
 private:
   size_t bits;
@@ -104,7 +104,7 @@ public:
 
   size_t getBits() const { return bits; }
 
-  void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 
 private:
   size_t bits;
@@ -113,7 +113,7 @@ class BooleanType : public Type {
 public:
   BooleanType() : Type(TypeClass::BOOLEAN) {}
 
-  void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 };
 class CharType : public Type {
 public:
@@ -128,7 +128,7 @@ public:
 
   const Type &getElementType() const { return *elementType; }
 
-  void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 
 private:
   std::unique_ptr<Type> elementType;
@@ -142,7 +142,7 @@ public:
   const Type &getReferencedType() const { return *referencedType; }
   bool getConstant() const { return constant; }
 
-  void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 
 private:
   std::unique_ptr<Type> referencedType;
@@ -160,7 +160,7 @@ public:
     return parameters;
   }
 
-  void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 
 private:
   std::unique_ptr<Type> returnType;
@@ -176,7 +176,7 @@ public:
     return fields;
   }
 
-  void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 
 private:
   std::map<std::string, std::unique_ptr<Type>> fields;
@@ -190,7 +190,7 @@ public:
     return options;
   }
 
-  void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 
 private:
   std::map<std::string, std::unique_ptr<Type>> options;
@@ -202,7 +202,7 @@ public:
 
   const std::map<std::string, int64_t> &getOptions() const { return options; }
 
-  void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 
 private:
   std::map<std::string, int64_t> options;
@@ -211,66 +211,135 @@ class IdentifiedType : public Type {
 public:
   IdentifiedType(std::string name) : Type(TypeClass::IDENTIFIED, name) {}
 
-  void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 };
 class AnyType : public Type {
 public:
   AnyType() : Type(TypeClass::ANY) {}
 
-  void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 };
 class AutoType : public Type {
 public:
   AutoType() : Type(TypeClass::AUTO) {}
 
-  void accept(TypeVisitor &visitor) const override { visitor.Visit(*this); }
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 };
 
-template <typename ValueType> class TypeTransformVisitor : public TypeVisitor {
+// Templated prefix so it doesn't conflict with the alias.
+template <typename TemplatedValueType>
+class TypeTransformVisitor : public TypeVisitor {
 public:
+  using ValueType = TemplatedValueType;
+
   ValueType visit(const Type &type) {
     type.accept(*this);
     return std::move(result);
   }
 
   virtual ValueType visitVoid(const VoidType &type) = 0;
-  void Visit(const VoidType &type) override { result = visitVoid(type); }
+  void visit(const VoidType &type) override { result = visitVoid(type); }
   virtual ValueType visitInteger(const IntegerType &type) = 0;
-  void Visit(const IntegerType &type) override { result = visitInteger(type); }
+  void visit(const IntegerType &type) override { result = visitInteger(type); }
   virtual ValueType visitFloat(const FloatType &type) = 0;
-  void Visit(const FloatType &type) override { result = visitFloat(type); }
+  void visit(const FloatType &type) override { result = visitFloat(type); }
   virtual ValueType visitBoolean(const BooleanType &type) = 0;
-  void Visit(const BooleanType &type) override { result = visitBoolean(type); }
+  void visit(const BooleanType &type) override { result = visitBoolean(type); }
+  virtual ValueType visitChar(const CharType &type) = 0;
+  void visit(const CharType &type) override { result = visitChar(type); }
   virtual ValueType visitArray(const ArrayType &type) = 0;
-  void Visit(const ArrayType &type) override { result = visitArray(type); }
+  void visit(const ArrayType &type) override { result = visitArray(type); }
   virtual ValueType visitReference(const ReferenceType &type) = 0;
-  void Visit(const ReferenceType &type) override {
+  void visit(const ReferenceType &type) override {
     result = visitReference(type);
   }
   virtual ValueType visitFunction(const FunctionType &type) = 0;
-  void Visit(const FunctionType &type) override {
+  void visit(const FunctionType &type) override {
     result = visitFunction(type);
   }
   virtual ValueType visitStruct(const StructType &type) = 0;
-  void Visit(const StructType &type) override { result = visitStruct(type); }
+  void visit(const StructType &type) override { result = visitStruct(type); }
   virtual ValueType visitUnion(const UnionType &type) = 0;
-  void Visit(const UnionType &type) override { result = visitUnion(type); }
+  void visit(const UnionType &type) override { result = visitUnion(type); }
   virtual ValueType visitEnum(const EnumType &type) = 0;
-  void Visit(const EnumType &type) override { result = visitEnum(type); }
+  void visit(const EnumType &type) override { result = visitEnum(type); }
   virtual ValueType visitIdentified(const IdentifiedType &type) = 0;
-  void Visit(const IdentifiedType &type) override {
+  void visit(const IdentifiedType &type) override {
     result = visitIdentified(type);
   }
   virtual ValueType visitAny(const AnyType &type) = 0;
-  void Visit(const AnyType &type) override { result = visitAny(type); }
+  void visit(const AnyType &type) override { result = visitAny(type); }
   virtual ValueType visitAuto(const AutoType &type) = 0;
-  void Visit(const AutoType &type) override { result = visitAuto(type); }
+  void visit(const AutoType &type) override { result = visitAuto(type); }
 
 private:
   ValueType result;
 };
 
 using TypeToTypeTransformVisitor = TypeTransformVisitor<std::unique_ptr<Type>>;
+
+class PartialTypeToTypeTransformVisitor : public TypeToTypeTransformVisitor {
+public:
+  ValueType visitVoid(const VoidType &type) override {
+    return std::make_unique<VoidType>();
+  }
+  ValueType visitInteger(const IntegerType &type) override {
+    return std::make_unique<IntegerType>(type.getSigned(), type.getBits());
+  }
+  ValueType visitFloat(const FloatType &type) override {
+    return std::make_unique<FloatType>(type.getBits());
+  }
+  ValueType visitBoolean(const BooleanType &type) override {
+    return std::make_unique<BooleanType>();
+  }
+  ValueType visitChar(const CharType &type) override {
+    return std::make_unique<CharType>();
+  }
+  ValueType visitArray(const ArrayType &type) override {
+    return std::make_unique<ArrayType>(visit(type.getElementType()));
+  }
+  ValueType visitReference(const ReferenceType &type) override {
+    return std::make_unique<ReferenceType>(visit(type.getReferencedType()),
+                                           type.getConstant());
+  }
+  ValueType visitFunction(const FunctionType &type) override {
+    std::vector<std::unique_ptr<Type>> parameters;
+    for (const auto &parameter : type.getParameters()) {
+      parameters.push_back(visit(*parameter));
+    }
+    return std::make_unique<FunctionType>(visit(type.getReturnType()),
+                                          std::move(parameters));
+  }
+  ValueType visitStruct(const StructType &type) override {
+    std::map<std::string, std::unique_ptr<Type>> fields;
+    for (const auto &field : type.getFields()) {
+      fields.emplace(field.first, visit(*field.second));
+    }
+    return std::make_unique<StructType>(std::move(fields), type.getName());
+  }
+  ValueType visitUnion(const UnionType &type) override {
+    std::map<std::string, std::unique_ptr<Type>> options;
+    for (const auto &option : type.getOptions()) {
+      options.emplace(option.first, visit(*option.second));
+    }
+    return std::make_unique<UnionType>(std::move(options));
+  }
+  ValueType visitEnum(const EnumType &type) override {
+    return std::make_unique<EnumType>(type.getOptions(), type.getName());
+  }
+  ValueType visitIdentified(const IdentifiedType &type) override {
+    return std::make_unique<IdentifiedType>(type.getName());
+  }
+  ValueType visitAny(const AnyType &type) override {
+    return std::make_unique<AnyType>();
+  }
+  ValueType visitAuto(const AutoType &type) override {
+    return std::make_unique<AutoType>();
+  }
+};
+static_assert(!std::is_abstract_v<PartialTypeToTypeTransformVisitor>,
+              "PartialTypeToTypeTransformVisitor doesn't implement all the "
+              "required methods from TypeTransformVisitor");
 
 struct NameAndType {
   std::string name;

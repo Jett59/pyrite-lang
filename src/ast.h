@@ -130,7 +130,7 @@ public:
   const std::unique_ptr<Type> &getType() const { return type; }
   const std::string &getName() const { return name; }
   const std::unique_ptr<AstNode> &getInitializer() const { return initializer; }
-  bool getIsMutable() const { return isMutable; }
+  bool getMutable() const { return isMutable; }
 
   void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
 
@@ -221,6 +221,8 @@ public:
       : AstNode(AstNodeType::CHAR_LITERAL, std::move(metadata)), value(value) {}
 
   int32_t getValue() const { return value; }
+
+  void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
 
 private:
   int32_t value;
@@ -417,9 +419,10 @@ private:
   std::optional<BinaryOperator> additionalOperator;
 };
 
-template <typename ValueType> class AstTransformerVisitor : public AstVisitor {
+template <typename TemplatedValueType>
+class AstTransformerVisitor : public AstVisitor {
 public:
-  using ValueType = ValueType;
+  using ValueType = TemplatedValueType;
 
   ValueType visit(const AstNode &node) {
     node.accept(*this);
@@ -459,8 +462,10 @@ private:
   ValueType result;
 };
 
-class PartialAstToAstTransformerVisitor
-    : public AstTransformerVisitor<std::unique_ptr<AstNode>> {
+using AstToAstTransformVisitor =
+    AstTransformerVisitor<std::unique_ptr<AstNode>>;
+
+class PartialAstToAstTransformerVisitor : public AstToAstTransformVisitor {
 public:
   virtual std::unique_ptr<Type> visitType(const Type &type) {
     return cloneType(type);
@@ -478,8 +483,9 @@ public:
   ValueType
   visitVariableDefinition(const VariableDefinitionNode &node) override {
     return std::make_unique<VariableDefinitionNode>(
-        node.getName(), visitType(*node.getType()),
-        visit(*node.getInitializer()), node.getMetadata().clone());
+        visitType(*node.getType()), node.getName(),
+        visit(*node.getInitializer()), node.getMutable(),
+        node.getMetadata().clone());
   }
 
   ValueType
@@ -489,8 +495,9 @@ public:
       newParameters.push_back({parameter.name, visitType(*parameter.type)});
     }
     return std::make_unique<FunctionDefinitionNode>(
-        node.getName(), visitType(*node.getReturnType()),
-        std::move(newParameters), visit(*node.getBody()), node.getMetadata());
+        node.getName(), std::move(newParameters),
+        visitType(*node.getReturnType()), visit(*node.getBody()),
+        node.getMetadata().clone());
   }
 
   ValueType visitIntegerLiteral(const IntegerLiteralNode &node) override {

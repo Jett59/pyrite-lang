@@ -40,6 +40,13 @@ pyrite::Parser::symbol_type yylex(pyrite::Lexer& lexer) {
 
 using std::make_unique;
 
+pyrite::AstMetadata createMetadata(const pyrite::location &location) {
+    pyrite::AstMetadata metadata;
+    metadata.line = location.begin.line;
+    metadata.column = location.begin.column;
+    return metadata;
+}
+
 %}
 
 %lex-param { pyrite::Lexer& lexer }
@@ -83,7 +90,7 @@ using std::make_unique;
 %%
 
 compilation-unit: definitions {
-    *ast = make_unique<CompilationUnitNode>($1);
+    *ast = make_unique<CompilationUnitNode>($1, createMetadata(@1));
 }
 
 definitions: /* empty */ {
@@ -97,13 +104,13 @@ definitions: /* empty */ {
 
 definition:
 type IDENTIFIER "=" expression ";" {
-    $$ = std::make_unique<VariableDefinitionNode>($1, $2, $4, false);
+    $$ = std::make_unique<VariableDefinitionNode>($1, $2, $4, false, createMetadata(@1));
 }
 | "mut" type IDENTIFIER "=" expression ";" {
-    $$ = std::make_unique<VariableDefinitionNode>($2, $3, $5, true);
+    $$ = std::make_unique<VariableDefinitionNode>($2, $3, $5, true, createMetadata(@1));
 }
 | type IDENTIFIER "(" name-and-type-list ")" block-statement {
-    $$ = std::make_unique<FunctionDefinitionNode>($2, $4, $1, $6);
+    $$ = std::make_unique<FunctionDefinitionNode>($2, $4, $1, $6, createMetadata(@1));
 }
 
 statement:
@@ -112,7 +119,7 @@ definition
 | expression ";"
 
 block-statement: "{" statement-list "}" {
-    $$ = std::make_unique<BlockStatementNode>($2);
+    $$ = std::make_unique<BlockStatementNode>($2, createMetadata(@1));
 }
 
 statement-list: /* empty */ {
@@ -192,13 +199,13 @@ type:
 
 expression:
 INTEGER_LITERAL {
-    $$ = std::make_unique<IntegerLiteralNode>($1);
+    $$ = std::make_unique<IntegerLiteralNode>($1, createMetadata(@1));
 }
 | FLOAT_LITERAL {
-    $$ = std::make_unique<FloatLiteralNode>($1);
+    $$ = std::make_unique<FloatLiteralNode>($1, createMetadata(@1));
 }
 | IDENTIFIER {
-    $$ = std::make_unique<VariableReferenceNode>($1);
+    $$ = std::make_unique<VariableReferenceNode>($1, createMetadata(@1));
 }
 
 %%
