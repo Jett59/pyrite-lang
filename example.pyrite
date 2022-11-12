@@ -5,4 +5,5 @@ i32 main(i32 argc) {
     void func() {
         42;
     }
+    return 75;
 }

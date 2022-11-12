@@ -63,6 +63,8 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %token <int64_t> INTEGER_LITERAL "integer literal"
 %token <double> FLOAT_LITERAL "float literal"
 
+%token RETURN "return"
+
 %token I8 "i8" I16 "i16" I32 "i32" I64 "i64" U8 "u8" U16 "u16" U32 "u32" U64 "u64" F32 "f32" F64 "f64" BOOL "bool" CHAR "char" VOID "void"
 %token AUTO "auto" ANY "any"
 
@@ -117,6 +119,9 @@ statement:
 definition
 | block-statement
 | expression ";"
+| "return" expression ";" {
+    $$ = std::make_unique<ReturnStatementNode>($2, createMetadata(@1));
+}
 
 block-statement: "{" statement-list "}" {
     $$ = std::make_unique<BlockStatementNode>($2, createMetadata(@1));
