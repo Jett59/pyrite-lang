@@ -23,7 +23,7 @@ public:
         typeToString(*node.getReturnType()) + " " + node.getName() + "(";
     if (node.getParameters().size() > 0) {
       for (auto &parameter : node.getParameters()) {
-        result += typeToString(*parameter.type) + " " + parameter.name;
+        result += typeToString(*parameter.type) + " " + parameter.name + ", ";
       }
       result = result.substr(0, result.size() - 2);
     }

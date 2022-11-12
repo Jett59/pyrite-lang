@@ -49,7 +49,7 @@ public:
     return result;
   }
   std::string visitUnion(const UnionType &type) override {
-    std::string result = "(";
+    std::string result = "any(";
     if (type.getOptions().size() > 0) {
       for (const auto &option : type.getOptions()) {
         result += visit(*option) + "|";

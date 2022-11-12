@@ -197,8 +197,13 @@ private:
 };
 class EnumType : public Type {
 public:
-  EnumType(std::map<std::string, int64_t> options, std::string name)
-      : Type(TypeClass::ENUM, std::move(name)), options(std::move(options)) {}
+  EnumType(std::map<std::string, int64_t> options)
+      : Type(TypeClass::ENUM), options(std::move(options)) {}
+  EnumType(std::vector<std::string> options) : Type(TypeClass::ENUM) {
+    for (size_t i = 0; i < options.size(); i++) {
+      this->options[options[i]] = i;
+    }
+  }
 
   const std::map<std::string, int64_t> &getOptions() const { return options; }
 
@@ -325,7 +330,7 @@ public:
     return std::make_unique<UnionType>(std::move(options));
   }
   ValueType visitEnum(const EnumType &type) override {
-    return std::make_unique<EnumType>(type.getOptions(), type.getName());
+    return std::make_unique<EnumType>(type.getOptions());
   }
   ValueType visitIdentified(const IdentifiedType &type) override {
     return std::make_unique<IdentifiedType>(type.getName());

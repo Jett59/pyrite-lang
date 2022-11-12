@@ -1,5 +1,5 @@
-any thing = 42;
-i32 main(i32 argc) {
+any(i32|i64) thing = 42;
+i32 greet(enum(good|bad) mood) {
     123;
     i32 thingy = thing;
     void func() {

@@ -145,7 +145,7 @@ stringLiteralTokenRule(Lexer &lexer, location &location) {
 }
 
 static TokenRule tokenRules[] = {
-  basicTokenRule(Parser::make_RETURN, "return"),
+    basicTokenRule(Parser::make_RETURN, "return"),
     basicTokenRule(Parser::make_I8, "i8"),
     basicTokenRule(Parser::make_I16, "i16"),
     basicTokenRule(Parser::make_I32, "i32"),
@@ -161,6 +161,7 @@ static TokenRule tokenRules[] = {
     basicTokenRule(Parser::make_VOID, "void"),
     basicTokenRule(Parser::make_AUTO, "auto"),
     basicTokenRule(Parser::make_ANY, "any"),
+    basicTokenRule(Parser::make_ENUM, "enum"),
     basicTokenRule(Parser::make_MUT, "mut"),
     identifierTokenRule,
     integerLiteralTokenRule,

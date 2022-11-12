@@ -63,10 +63,13 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %token <int64_t> INTEGER_LITERAL "integer literal"
 %token <double> FLOAT_LITERAL "float literal"
 
+%token TRUE "true" FALSE "false"
+
 %token RETURN "return"
 
 %token I8 "i8" I16 "i16" I32 "i32" I64 "i64" U8 "u8" U16 "u16" U32 "u32" U64 "u64" F32 "f32" F64 "f64" BOOL "bool" CHAR "char" VOID "void"
 %token AUTO "auto" ANY "any"
+%token ENUM "enum"
 
 %token MUT "mut"
 
@@ -82,10 +85,13 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 
 %start compilation-unit
 
+%type <std::vector<std::string>> piped-identifier-list
+
 %type <std::unique_ptr<AstNode>> definition expression statement block-statement
 %type <std::vector<std::unique_ptr<AstNode>>> definitions statement-list
 
 %type <std::unique_ptr<Type>> type
+%type <std::vector<std::unique_ptr<Type>>> piped-type-list
 %type <NameAndType> name-and-type
 %type <std::vector<NameAndType>> name-and-type-list
 
@@ -133,6 +139,15 @@ statement-list: /* empty */ {
 | statement-list statement {
     auto list = $1;
     list.push_back($2);
+    $$ = std::move(list);
+}
+
+piped-type-list: type {
+    $$.push_back($1);
+}
+| piped-type-list "|" type {
+    auto list = $1;
+    list.push_back($3);
     $$ = std::move(list);
 }
 
@@ -198,6 +213,12 @@ type:
 | "any" {
     $$ = std::make_unique<AnyType>();
 }
+| "any" "(" piped-type-list ")" {
+    $$ = std::make_unique<UnionType>($3);
+}
+| "enum" "(" piped-identifier-list ")" {
+    $$ = std::make_unique<EnumType>($3);
+}
 | IDENTIFIER {
     $$ = std::make_unique<IdentifiedType>($1);
 }
@@ -209,8 +230,26 @@ INTEGER_LITERAL {
 | FLOAT_LITERAL {
     $$ = std::make_unique<FloatLiteralNode>($1, createMetadata(@1));
 }
+| STRING_LITERAL {
+    $$ = std::make_unique<StringLiteralNode>($1, createMetadata(@1));
+}
+| "true" {
+    $$ = std::make_unique<BooleanLiteralNode>(true, createMetadata(@1));
+}
+| "false" {
+    $$ = std::make_unique<BooleanLiteralNode>(false, createMetadata(@1));
+}
 | IDENTIFIER {
     $$ = std::make_unique<VariableReferenceNode>($1, createMetadata(@1));
+}
+
+piped-identifier-list: IDENTIFIER {
+    $$.push_back($1);
+}
+| piped-identifier-list "|" IDENTIFIER {
+    auto list = $1;
+    list.push_back($3);
+    $$ = std::move(list);
 }
 
 %%
