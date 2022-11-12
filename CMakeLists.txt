@@ -29,6 +29,8 @@ add_executable(pyrite
     src/main.cpp
     src/lexer.cpp
     "${CMAKE_CURRENT_BINARY_DIR}/parser.cc"
+    src/type.cpp
+    src/ast.cpp
 )
 
 # Ref: https://stackoverflow.com/a/60890947/11553216

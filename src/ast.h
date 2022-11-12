@@ -32,6 +32,7 @@ enum class AstNodeType {
 struct AstMetadata {
   size_t line, column;
   std::optional<std::unique_ptr<Type>> valueType;
+  bool parennedExpression;
 
   AstMetadata clone() const {
     AstMetadata metadata;
@@ -40,6 +41,7 @@ struct AstMetadata {
     if (valueType.has_value()) {
       metadata.valueType = cloneType(**valueType);
     }
+    metadata.parennedExpression = parennedExpression;
     return metadata;
   }
 };
@@ -318,6 +320,47 @@ enum class BinaryOperator {
   BITWISE_SHIFT_LEFT,
   BITWISE_SHIFT_RIGHT,
 };
+static inline std::string binaryOperatorToString(BinaryOperator op) {
+  switch (op) {
+  case BinaryOperator::ADD:
+    return "+";
+  case BinaryOperator::SUBTRACT:
+    return "-";
+  case BinaryOperator::MULTIPLY:
+    return "*";
+  case BinaryOperator::DIVIDE:
+    return "/";
+  case BinaryOperator::MODULO:
+    return "%";
+  case BinaryOperator::EQUAL:
+    return "==";
+  case BinaryOperator::NOT_EQUAL:
+    return "!=";
+  case BinaryOperator::LESS_THAN:
+    return "<";
+  case BinaryOperator::LESS_THAN_OR_EQUAL:
+    return "<=";
+  case BinaryOperator::GREATER_THAN:
+    return ">";
+  case BinaryOperator::GREATER_THAN_OR_EQUAL:
+    return ">=";
+  case BinaryOperator::LOGICAL_AND:
+    return "&&";
+  case BinaryOperator::LOGICAL_OR:
+    return "||";
+  case BinaryOperator::BITWISE_AND:
+    return "&";
+  case BinaryOperator::BITWISE_OR:
+    return "|";
+  case BinaryOperator::BITWISE_XOR:
+    return "^";
+  case BinaryOperator::BITWISE_SHIFT_LEFT:
+    return "<<";
+  case BinaryOperator::BITWISE_SHIFT_RIGHT:
+    return ">>";
+  }
+  return "";
+}
 
 class BinaryExpressionNode : public AstNode {
 public:
@@ -347,6 +390,31 @@ enum class UnaryOperator {
   PREFIX_INCREMENT,
   PREFIX_DECREMENT,
 };
+static inline bool isPrefixUnaryOperator(UnaryOperator op) {
+  return op == UnaryOperator::NEGATE || op == UnaryOperator::LOGICAL_NOT ||
+         op == UnaryOperator::BITWISE_NOT ||
+         op == UnaryOperator::PREFIX_INCREMENT ||
+         op == UnaryOperator::PREFIX_DECREMENT;
+}
+static inline std::string unaryOperatorToString(UnaryOperator op) {
+  switch (op) {
+  case UnaryOperator::NEGATE:
+    return "-";
+  case UnaryOperator::LOGICAL_NOT:
+    return "!";
+  case UnaryOperator::BITWISE_NOT:
+    return "~";
+  case UnaryOperator::POSTFIX_INCREMENT:
+    return "++";
+  case UnaryOperator::POSTFIX_DECREMENT:
+    return "--";
+  case UnaryOperator::PREFIX_INCREMENT:
+    return "++";
+  case UnaryOperator::PREFIX_DECREMENT:
+    return "--";
+  }
+  return "";
+}
 
 class UnaryExpressionNode : public AstNode {
 public:
@@ -364,6 +432,7 @@ private:
   UnaryOperator op;
   std::unique_ptr<AstNode> operand;
 };
+
 class VariableReferenceNode : public AstNode {
 public:
   VariableReferenceNode(std::string name, AstMetadata metadata)
@@ -586,6 +655,8 @@ public:
 static_assert(!std::is_abstract_v<PartialAstToAstTransformerVisitor>,
               "PartialAstToAstTransformVisitor does not implement all the "
               "required methods from AstTransformVisitor");
+
+std::string astToString(const AstNode &);
 } // namespace pyrite
 
 #endif

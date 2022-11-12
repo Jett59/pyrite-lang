@@ -183,17 +183,17 @@ private:
 };
 class UnionType : public Type {
 public:
-  UnionType(std::map<std::string, std::unique_ptr<Type>> options)
+  UnionType(std::vector<std::unique_ptr<Type>> options)
       : Type(TypeClass::UNION), options(std::move(options)) {}
 
-  const std::map<std::string, std::unique_ptr<Type>> &getOptions() const {
+  const std::vector<std::unique_ptr<Type>> &getOptions() const {
     return options;
   }
 
   void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 
 private:
-  std::map<std::string, std::unique_ptr<Type>> options;
+  std::vector<std::unique_ptr<Type>> options;
 };
 class EnumType : public Type {
 public:
@@ -318,9 +318,9 @@ public:
     return std::make_unique<StructType>(std::move(fields), type.getName());
   }
   ValueType visitUnion(const UnionType &type) override {
-    std::map<std::string, std::unique_ptr<Type>> options;
+    std::vector<std::unique_ptr<Type>> options;
     for (const auto &option : type.getOptions()) {
-      options.emplace(option.first, visit(*option.second));
+      options.push_back(visit(*option));
     }
     return std::make_unique<UnionType>(std::move(options));
   }
@@ -347,6 +347,7 @@ struct NameAndType {
 };
 
 std::unique_ptr<Type> cloneType(const Type &type);
+std::string typeToString(const Type &);
 } // namespace pyrite
 
 #endif
