@@ -95,6 +95,14 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %type <NameAndType> name-and-type
 %type <std::vector<NameAndType>> name-and-type-list
 
+%right "="
+%left "||" "&&"
+%left "==" "!="
+%left "<" "<=" ">" ">="
+%left "+" "-"
+%left "*" "/" "%"
+%left "|" "^" "&"
+
 %%
 
 compilation-unit: definitions {
@@ -213,6 +221,9 @@ type:
 | "any" {
     $$ = std::make_unique<AnyType>();
 }
+| "[" type "]" {
+    $$ = std::make_unique<ArrayType>($2);
+}
 | "any" "(" piped-type-list ")" {
     $$ = std::make_unique<UnionType>($3);
 }
@@ -241,6 +252,44 @@ INTEGER_LITERAL {
 }
 | IDENTIFIER {
     $$ = std::make_unique<VariableReferenceNode>($1, createMetadata(@1));
+}
+| "(" expression ")" {
+    auto node = $2;
+    node->getMetadata().parennedExpression = true;
+    $$ = std::move(node);
+}
+| expression "+" expression {
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::ADD, $1, $3, createMetadata(@1));
+}
+| expression "-" expression {
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::SUBTRACT, $1, $3, createMetadata(@1));
+}
+| expression "*" expression {
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::MULTIPLY, $1, $3, createMetadata(@1));
+}
+| expression "/" expression {
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::DIVIDE, $1, $3, createMetadata(@1));
+}
+| expression "%" expression {
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::MODULO, $1, $3, createMetadata(@1));
+}
+| expression "==" expression {
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::EQUAL, $1, $3, createMetadata(@1));
+}
+| expression "!=" expression {
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::NOT_EQUAL, $1, $3, createMetadata(@1));
+}
+| expression "<" expression {
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::LESS_THAN, $1, $3, createMetadata(@1));
+}
+| expression ">" expression {
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::GREATER_THAN, $1, $3, createMetadata(@1));
+}
+| expression "<=" expression {
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::LESS_THAN_OR_EQUAL, $1, $3, createMetadata(@1));
+}
+| expression ">=" expression {
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::GREATER_THAN_OR_EQUAL, $1, $3, createMetadata(@1));
 }
 
 piped-identifier-list: IDENTIFIER {

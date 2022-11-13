@@ -163,6 +163,8 @@ static TokenRule tokenRules[] = {
     basicTokenRule(Parser::make_ANY, "any"),
     basicTokenRule(Parser::make_ENUM, "enum"),
     basicTokenRule(Parser::make_MUT, "mut"),
+    basicTokenRule(Parser::make_TRUE, "true"),
+    basicTokenRule(Parser::make_FALSE, "false"),
     identifierTokenRule,
     integerLiteralTokenRule,
     stringLiteralTokenRule,

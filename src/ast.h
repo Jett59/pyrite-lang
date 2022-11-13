@@ -97,6 +97,8 @@ public:
   AstNodeType getNodeType() const { return nodeType; }
 
   const AstMetadata &getMetadata() const { return metadata; }
+  // Used for the parser to change the metadata of an expression when performing transformations on them.
+  AstMetadata &getMetadata() { return metadata; }
 
   virtual void accept(AstVisitor &) const = 0;
 
