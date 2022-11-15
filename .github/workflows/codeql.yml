@@ -38,6 +38,33 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
+# Ref: https://github.com/orgs/community/discussions/25925
+# It really is annoying that we need to do this manually (we even have to build bison from source!) but I don't think there is a better solution.
+    - name: update GCC
+      run: |
+        sudo apt-get install build-essential software-properties-common 
+#        sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+#        sudo apt-get install gcc-10 g++-10
+#        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100 --slave /usr/bin/g++ g++ /usr/bin/g++-10
+#        sudo update-alternatives --config gcc
+        sudo apt-get install gcc g++
+    - name: update bison
+      run: |
+        wget http://ftp.gnu.org/gnu/bison/bison-3.8.1.tar.gz
+        tar -zxvf bison-3.8.1.tar.gz
+        cd bison-3.8.1
+        ./configure
+        make
+        sudo make install         
+    - name: update llvm
+      run: |
+        sudo apt install -y llvm
+    - name: check version
+      run: |
+        bison -V
+        gcc --version
+        llvm-config --version
+
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v2
