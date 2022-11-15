@@ -27,6 +27,8 @@ enum class AstNodeType {
   VARIABLE_REFERENCE,
   FUNCTION_CALL,
   ASSIGNMENT,
+  DEREFERENCE,
+  CAST,
 };
 
 struct AstMetadata {
@@ -64,6 +66,8 @@ class UnaryExpressionNode;
 class VariableReferenceNode;
 class FunctionCallNode;
 class AssignmentNode;
+class DereferenceNode;
+class CastNode;
 
 class AstVisitor {
 public:
@@ -86,6 +90,8 @@ public:
   virtual void visit(const VariableReferenceNode &) = 0;
   virtual void visit(const FunctionCallNode &) = 0;
   virtual void visit(const AssignmentNode &) = 0;
+  virtual void visit(const DereferenceNode &) = 0;
+  virtual void visit(const CastNode &) = 0;
 };
 
 class AstNode {
@@ -97,7 +103,8 @@ public:
   AstNodeType getNodeType() const { return nodeType; }
 
   const AstMetadata &getMetadata() const { return metadata; }
-  // Used for the parser to change the metadata of an expression when performing transformations on them.
+  // Used for the parser to change the metadata of an expression when performing
+  // transformations on them.
   AstMetadata &getMetadata() { return metadata; }
 
   virtual void accept(AstVisitor &) const = 0;
@@ -489,6 +496,35 @@ private:
   std::unique_ptr<AstNode> rhs;
   std::optional<BinaryOperator> additionalOperator;
 };
+class DereferenceNode : public AstNode {
+public:
+  DereferenceNode(std::unique_ptr<AstNode> value, AstMetadata metadata)
+      : AstNode(AstNodeType::DEREFERENCE, std::move(metadata)),
+        value(std::move(value)) {}
+
+  const std::unique_ptr<AstNode> &getValue() const { return value; }
+
+  void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
+
+private:
+  std::unique_ptr<AstNode> value;
+};
+class CastNode : public AstNode {
+public:
+  CastNode(std::unique_ptr<AstNode> value, std::unique_ptr<Type> type,
+           AstMetadata metadata)
+      : AstNode(AstNodeType::CAST, std::move(metadata)),
+        value(std::move(value)), type(std::move(type)) {}
+
+  const std::unique_ptr<AstNode> &getValue() const { return value; }
+  const std::unique_ptr<Type> &getType() const { return type; }
+
+  void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
+
+private:
+  std::unique_ptr<AstNode> value;
+  std::unique_ptr<Type> type;
+};
 
 template <typename TemplatedValueType>
 class AstTransformerVisitor : public AstVisitor {
@@ -526,6 +562,8 @@ public:
   IMPLEMENT_VISIT_NODE(VariableReference)
   IMPLEMENT_VISIT_NODE(FunctionCall)
   IMPLEMENT_VISIT_NODE(Assignment)
+  IMPLEMENT_VISIT_NODE(Dereference)
+  IMPLEMENT_VISIT_NODE(Cast)
 
 #undef IMPLEMENT_VISIT_NODE
 
@@ -652,6 +690,17 @@ public:
     return std::make_unique<AssignmentNode>(
         visit(*node.getLhs()), visit(*node.getRhs()),
         node.getAdditionalOperator(), node.getMetadata().clone());
+  }
+
+  ValueType visitDereference(const DereferenceNode &node) {
+    return std::make_unique<DereferenceNode>(visit(*node.getValue()),
+                                             node.getMetadata().clone());
+  }
+
+  ValueType visitCast(const CastNode &node) {
+    return std::make_unique<CastNode>(visit(*node.getValue()),
+                                      visitType(*node.getType()),
+                                      node.getMetadata().clone());
   }
 };
 static_assert(!std::is_abstract_v<PartialAstToAstTransformerVisitor>,

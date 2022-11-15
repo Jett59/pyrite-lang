@@ -126,6 +126,13 @@ public:
                                node.getRhs()->getMetadata());
     }
   }
+  std::string visitDereference(const DereferenceNode &node) {
+    return "*" + possiblyAddParens(visit(*node.getValue()), node.getMetadata());
+  }
+  std::string visitCast(const CastNode &node) {
+    return possiblyAddParens(visit(*node.getValue()), node.getMetadata()) +
+           " as " + typeToString(*node.getType());
+  }
 
 private:
   size_t indent = 0;

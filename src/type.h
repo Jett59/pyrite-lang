@@ -78,6 +78,12 @@ private:
   TypeClass typeClass;
   std::string name;
 };
+
+struct NameAndType {
+  std::string name;
+  std::unique_ptr<Type> type;
+};
+
 class VoidType : public Type {
 public:
   VoidType() : Type(TypeClass::VOID) {}
@@ -168,18 +174,15 @@ private:
 };
 class StructType : public Type {
 public:
-  StructType(std::map<std::string, std::unique_ptr<Type>> fields,
-             std::string name)
+  StructType(std::vector<NameAndType> fields, std::string name)
       : Type(TypeClass::STRUCT, std::move(name)), fields(std::move(fields)) {}
 
-  const std::map<std::string, std::unique_ptr<Type>> &getFields() const {
-    return fields;
-  }
+  const std::vector<NameAndType> &getFields() const { return fields; }
 
   void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 
 private:
-  std::map<std::string, std::unique_ptr<Type>> fields;
+  std::vector<NameAndType> fields;
 };
 class UnionType : public Type {
 public:
@@ -197,20 +200,15 @@ private:
 };
 class EnumType : public Type {
 public:
-  EnumType(std::map<std::string, int64_t> options)
+  EnumType(std::vector<std::string> options)
       : Type(TypeClass::ENUM), options(std::move(options)) {}
-  EnumType(std::vector<std::string> options) : Type(TypeClass::ENUM) {
-    for (size_t i = 0; i < options.size(); i++) {
-      this->options[options[i]] = i;
-    }
-  }
 
-  const std::map<std::string, int64_t> &getOptions() const { return options; }
+  const std::vector<std::string> &getOptions() const { return options; }
 
   void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 
 private:
-  std::map<std::string, int64_t> options;
+  std::vector<std::string> options;
 };
 class IdentifiedType : public Type {
 public:
@@ -316,9 +314,9 @@ public:
                                           std::move(parameters));
   }
   ValueType visitStruct(const StructType &type) override {
-    std::map<std::string, std::unique_ptr<Type>> fields;
+    std::vector<NameAndType> fields;
     for (const auto &field : type.getFields()) {
-      fields.emplace(field.first, visit(*field.second));
+      fields.push_back({field.name, visit(*field.type)});
     }
     return std::make_unique<StructType>(std::move(fields), type.getName());
   }
@@ -346,13 +344,24 @@ static_assert(!std::is_abstract_v<PartialTypeToTypeTransformVisitor>,
               "PartialTypeToTypeTransformVisitor doesn't implement all the "
               "required methods from TypeTransformVisitor");
 
-struct NameAndType {
-  std::string name;
-  std::unique_ptr<Type> type;
-};
-
 std::unique_ptr<Type> cloneType(const Type &type);
 std::string typeToString(const Type &);
+bool typeEquals(const Type &a, const Type &b);
+
+class AstNode;
+
+// Modifies the astNode to include any necessary casting operators to perform
+// the convertion.
+void convertTypesForAssignment(std::unique_ptr<AstNode> &rhsAstNode,
+                               const Type &lhs, const Type &rhs);
+// Modifies the astNode to include any necessary casting operators to perform
+// the convertion.
+void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &rhsAstNode,
+                                   const Type &lhs, const Type &rhs);
+// Modifies the astNode to include any necessary casting operators to perform
+// the convertion.
+void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &rhsAstNode,
+                                  const Type &operand);
 } // namespace pyrite
 
 #endif
