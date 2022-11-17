@@ -21,6 +21,8 @@ public:
 private:
   std::string message;
   size_t line, column;
+
+  friend void warn(const PyriteException &);
 };
 
 static inline void warn(const std::string &message, size_t line,
@@ -28,8 +30,12 @@ static inline void warn(const std::string &message, size_t line,
   std::cerr << "warning: " << line << ":" << column << ": " << message
             << std::endl;
 }
-void warn(const std::string &message, const AstMetadata &metadata) {
+static inline void warn(const std::string &message,
+                        const AstMetadata &metadata) {
   warn(message, metadata.line, metadata.column);
+}
+static inline void warn(const PyriteException &exception) {
+  warn(exception.message, exception.line, exception.column);
 }
 } // namespace pyrite
 

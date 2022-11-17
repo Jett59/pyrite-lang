@@ -1,6 +1,7 @@
 #include "type.h"
 #include "ast.h"
 #include "error.h"
+#include <algorithm>
 
 namespace pyrite {
 std::unique_ptr<Type> cloneType(const Type &type) {
@@ -233,6 +234,24 @@ static PyriteException typeMismatch(const Type &expected, const Type &actual,
                              ", got " + typeToString(actual),
                          astMetadata);
 }
+static PyriteException incompatibleTypes(const Type &a, const Type &b,
+                                         const AstMetadata &metadata) {
+  return PyriteException("Type mismatch: type " + typeToString(a) +
+                             " is not compatible with " + typeToString(b),
+                         metadata);
+}
+static PyriteException convertionBetweenSigns(const Type &a, const Type &b,
+                                              const AstMetadata &metadata) {
+  return PyriteException("Converting between " + typeToString(a) + " and " +
+                             typeToString(b) + " of different sign",
+                         metadata);
+}
+static PyriteException lossyConvertion(const Type &from, const Type &to,
+                                       const AstMetadata &metadata) {
+  return PyriteException("Converting from " + typeToString(from) + " to " +
+                             typeToString(from) + " loses precision",
+                         metadata);
+}
 
 static bool emitCast(const Type &from, const Type &to,
                      std::unique_ptr<AstNode> &astNode) {
@@ -251,16 +270,21 @@ static bool emitCast(const Type &from, const Type &to,
              from.getTypeClass() == TypeClass::INTEGER) {
     const IntegerType &integerToType = static_cast<const IntegerType &>(to);
     const IntegerType &integerFromType = static_cast<const IntegerType &>(from);
-    if (integerToType.getBits() >= integerFromType.getBits()) {
-      canCast = true;
+    if (integerToType.getBits() < integerFromType.getBits()) {
+      throw lossyConvertion(from, to, astNode->getMetadata());
     }
+    if (integerToType.getSigned() != integerFromType.getSigned()) {
+      throw convertionBetweenSigns(from, to, astNode->getMetadata());
+    }
+    canCast = true;
   } else if (to.getTypeClass() == TypeClass::FLOAT &&
              from.getTypeClass() == TypeClass::FLOAT) {
     const FloatType &floatToType = static_cast<const FloatType &>(to);
     const FloatType &floatFromType = static_cast<const FloatType &>(from);
-    if (floatToType.getBits() >= floatFromType.getBits()) {
-      canCast = true;
+    if (floatToType.getBits() < floatFromType.getBits()) {
+      throw lossyConvertion(from, to, astNode->getMetadata());
     }
+    canCast = true;
   }
   if (canCast) {
     AstMetadata newMetadata = astNode->getMetadata().clone();
@@ -271,38 +295,75 @@ static bool emitCast(const Type &from, const Type &to,
   return canCast;
 }
 
+void removeReference(const Type &type, std::unique_ptr<AstNode> &astNode) {
+  if (type.getTypeClass() == TypeClass::REFERENCE) {
+    AstMetadata newMetadata = astNode->getMetadata().clone();
+    newMetadata.valueType =
+        cloneType(static_cast<const ReferenceType &>(type).getReferencedType());
+    astNode = std::make_unique<DereferenceNode>(std::move(astNode),
+                                                std::move(newMetadata));
+  }
+}
+
 void convertTypesForAssignment(std::unique_ptr<AstNode> &rhsAstNode,
                                const Type &lhs, const Type &rhs) {
   auto lhsType = &lhs;
   auto rhsType = &rhs;
   if (lhsType->getTypeClass() != TypeClass::REFERENCE &&
       rhsType->getTypeClass() == TypeClass::REFERENCE) {
-    AstMetadata newMetadata = rhsAstNode->getMetadata().clone();
-    newMetadata.valueType = cloneType(
-        static_cast<const ReferenceType &>(*rhsType).getReferencedType());
-    rhsAstNode = std::make_unique<DereferenceNode>(std::move(rhsAstNode),
-                                                   std::move(newMetadata));
+    removeReference(*rhsType, rhsAstNode);
     rhsType = &**rhsAstNode->getMetadata().valueType;
   }
-  TypeClass lhsTypeClass = lhsType->getTypeClass();
-  TypeClass rhsTypeClass = rhsType->getTypeClass();
-  if (lhsTypeClass == TypeClass::REFERENCE &&
-      rhsTypeClass == TypeClass::REFERENCE) {
-    const auto &lhsReferenceType = static_cast<const ReferenceType &>(*lhsType);
-    const auto &rhsReferenceType = static_cast<const ReferenceType &>(*rhsType);
-    if (rhsReferenceType.getConstant() && !lhsReferenceType.getConstant()) {
-      throw PyriteException(
-          "Cannot assign constant reference to mutable reference",
-          rhsAstNode->getMetadata());
+  emitCast(*rhsType, *lhsType, rhsAstNode);
+  rhsType = &**rhsAstNode->getMetadata().valueType;
+  if (!typeEquals(*lhsType, *rhsType)) {
+    throw typeMismatch(*lhsType, *rhsType, rhsAstNode->getMetadata());
+  }
+}
+void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
+                                   std::unique_ptr<AstNode> &rhsAstNode,
+                                   const Type &lhs, const Type &rhs,
+                                   const AstMetadata &expressionMetadata) {
+  // Binary expressions don't work with references.
+  removeReference(lhs, lhsAstNode);
+  removeReference(rhs, rhsAstNode);
+  if (lhs.getTypeClass() != rhs.getTypeClass()) {
+    throw incompatibleTypes(lhs, rhs, expressionMetadata);
+  }
+  if (lhs.getTypeClass() == TypeClass::INTEGER) {
+    const auto &lhsInteger = static_cast<const IntegerType &>(lhs);
+    const auto &rhsInteger = static_cast<const IntegerType &>(rhs);
+    if (lhsInteger.getSigned() != rhsInteger.getSigned()) {
+      throw convertionBetweenSigns(lhs, rhs, expressionMetadata);
     }
-  } else if (lhsTypeClass == TypeClass::ANY && rhsTypeClass != TypeClass::ANY) {
-    AstMetadata newMetadata = rhsAstNode->getMetadata().clone();
-    newMetadata.valueType = cloneType(*lhsType);
-    rhsAstNode = std::make_unique<CastNode>(
-        std::move(rhsAstNode), cloneType(*lhsType), std::move(newMetadata));
-    rhsType = &**rhsAstNode->getMetadata().valueType;
-    rhsTypeClass = rhsType->getTypeClass();
-  } else if (lhsTypeClass == TypeClass::UNION) {
+    std::unique_ptr<Type> integerType = std::make_unique<IntegerType>(
+        std::max(lhsInteger.getBits(), rhsInteger.getBits()),
+        std::max(lhsInteger.getSigned(), rhsInteger.getSigned()));
+  } else if (lhs.getTypeClass() == TypeClass::FLOAT) {
+    const auto &lhsFloat = static_cast<const FloatType &>(lhs);
+    const auto &rhsFloat = static_cast<const FloatType &>(rhs);
+    std::unique_ptr<Type> floatType = std::make_unique<FloatType>(
+        std::max(lhsFloat.getBits(), rhsFloat.getBits()));
+  } else {
+    throw PyriteException("Binary operator for types " + typeToString(lhs) +
+                              " and " + typeToString(rhs) + " is invalid",
+                          expressionMetadata);
+  }
+}
+void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &valueAstNode,
+                                  const Type &type, UnaryOperator op) {
+  // Unary expressions don't work with references.
+  removeReference(type, valueAstNode);
+  if (type.getTypeClass() == TypeClass::INTEGER) {
+    const auto &integer = static_cast<const IntegerType &>(type);
+    if (op == UnaryOperator::NEGATE && !integer.getSigned()) {
+      throw PyriteException("Can't negate unsigned integer",
+                            valueAstNode->getMetadata());
+    }
+  } else if (type.getTypeClass() != TypeClass::FLOAT) {
+    throw PyriteException("Unary operator for type " + typeToString(type) +
+                              " is invalid",
+                          valueAstNode->getMetadata());
   }
 }
 } // namespace pyrite

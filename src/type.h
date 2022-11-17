@@ -350,18 +350,14 @@ bool typeEquals(const Type &a, const Type &b);
 
 class AstNode;
 
-// Modifies the astNode to include any necessary casting operators to perform
-// the convertion.
 void convertTypesForAssignment(std::unique_ptr<AstNode> &rhsAstNode,
                                const Type &lhs, const Type &rhs);
-// Modifies the astNode to include any necessary casting operators to perform
-// the convertion.
-void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &rhsAstNode,
-                                   const Type &lhs, const Type &rhs);
-// Modifies the astNode to include any necessary casting operators to perform
-// the convertion.
-void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &rhsAstNode,
-                                  const Type &operand);
+void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
+                                   std::unique_ptr<AstNode> &rhsAstNode,
+                                   const Type &lhs, const Type &rhs,
+                                   const AstMetadata &expressionMetadata);
+void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &valueAstNode,
+                                  const Type &operand, UnaryOperator op);
 } // namespace pyrite
 
 #endif
