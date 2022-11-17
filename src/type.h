@@ -287,7 +287,7 @@ public:
     return std::make_unique<VoidType>();
   }
   ValueType visitInteger(const IntegerType &type) override {
-    return std::make_unique<IntegerType>(type.getSigned(), type.getBits());
+    return std::make_unique<IntegerType>(type.getBits(), type.getSigned());
   }
   ValueType visitFloat(const FloatType &type) override {
     return std::make_unique<FloatType>(type.getBits());
