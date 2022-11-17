@@ -22,7 +22,7 @@ private:
   std::string message;
   size_t line, column;
 
-  friend void warn(const PyriteException &);
+  friend static inline void warn(const PyriteException &);
 };
 
 static inline void warn(const std::string &message, size_t line,
