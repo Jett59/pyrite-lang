@@ -178,10 +178,12 @@ private:
 
 public:
   ValueType visitCompilationUnit(const CompilationUnitNode &node) override {
+    symbolTable.push_back({});
     std::vector<std::unique_ptr<AstNode>> newDefinitions;
     for (auto &definition : node.getDefinitions()) {
       newDefinitions.push_back(visit(*definition));
     }
+    symbolTable.pop_back();
     return std::make_unique<CompilationUnitNode>(std::move(newDefinitions),
                                                  cloneMetadata(node));
   }
@@ -199,9 +201,11 @@ public:
       throw PyriteException("Variable of reference type may not be mutable",
                             node.getMetadata());
     }
-    return std::make_unique<VariableDefinitionNode>(
+    auto result = std::make_unique<VariableDefinitionNode>(
         cloneType(type), node.getName(), std::move(initializer),
         node.getMutable(), setType(node.getMetadata(), std::move(valueType)));
+    symbolTable.back().insert({node.getName(), *result});
+    return std::move(result);
   }
   ValueType
   visitFunctionDefinition(const FunctionDefinitionNode &node) override {
@@ -214,7 +218,7 @@ public:
       parameterTypes.push_back(cloneType(*parameter.type));
     }
     auto body = visit(*node.getBody());
-    return std::make_unique<FunctionDefinitionNode>(
+    auto result = std::make_unique<FunctionDefinitionNode>(
         node.getName(), std::move(newParameters),
         cloneType(*node.getReturnType()), std::move(body),
         setType(node.getMetadata(),
@@ -222,6 +226,8 @@ public:
                     std::make_unique<FunctionType>(std::move(returnType),
                                                    std::move(parameterTypes)),
                     true)));
+    symbolTable.back().insert({node.getName(), *result});
+    return std::move(result);
   }
   ValueType visitIntegerLiteral(const IntegerLiteralNode &node) override {
     return std::make_unique<IntegerLiteralNode>(
@@ -255,10 +261,12 @@ public:
                                                  cloneMetadata(node));
   }
   ValueType visitBlockStatement(const BlockStatementNode &node) override {
+    symbolTable.push_back({});
     std::vector<std::unique_ptr<AstNode>> newStatements;
     for (auto &statement : node.getStatements()) {
       newStatements.push_back(visit(*statement));
     }
+    symbolTable.pop_back();
     return std::make_unique<BlockStatementNode>(std::move(newStatements),
                                                 cloneMetadata(node));
   }
@@ -285,8 +293,10 @@ public:
     convertTypesForBinaryOperator(lhs, rhs, **lhs->getMetadata().valueType,
                                   **rhs->getMetadata().valueType,
                                   node.getMetadata());
+    auto valueType = cloneType(**lhs->getMetadata().valueType);
     return std::make_unique<BinaryExpressionNode>(
-        node.getOp(), std::move(lhs), std::move(rhs), cloneMetadata(node));
+        node.getOp(), std::move(lhs), std::move(rhs),
+        setType(node.getMetadata(), std::move(valueType)));
   }
   ValueType visitUnaryExpression(const UnaryExpressionNode &node) override {
     auto operand = visit(*node.getOperand());

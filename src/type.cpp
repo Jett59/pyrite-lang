@@ -245,14 +245,14 @@ static PyriteException incompatibleTypes(const Type &a, const Type &b,
 }
 static PyriteException convertionBetweenSigns(const Type &a, const Type &b,
                                               const AstMetadata &metadata) {
-  return PyriteException("Converting between " + typeToString(a) + " and " +
+  return PyriteException("Cannot convert between " + typeToString(a) + " and " +
                              typeToString(b) + " of different sign",
                          metadata);
 }
 static PyriteException lossyConvertion(const Type &from, const Type &to,
                                        const AstMetadata &metadata) {
   return PyriteException("Converting from " + typeToString(from) + " to " +
-                             typeToString(from) + " loses precision",
+                             typeToString(to) + " loses precision",
                          metadata);
 }
 
@@ -342,11 +342,15 @@ void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
     std::unique_ptr<Type> integerType = std::make_unique<IntegerType>(
         std::max(lhsInteger.getBits(), rhsInteger.getBits()),
         std::max(lhsInteger.getSigned(), rhsInteger.getSigned()));
+    emitCast(lhs, *integerType, lhsAstNode);
+    emitCast(rhs, *integerType, rhsAstNode);
   } else if (lhs.getTypeClass() == TypeClass::FLOAT) {
     const auto &lhsFloat = static_cast<const FloatType &>(lhs);
     const auto &rhsFloat = static_cast<const FloatType &>(rhs);
     std::unique_ptr<Type> floatType = std::make_unique<FloatType>(
         std::max(lhsFloat.getBits(), rhsFloat.getBits()));
+    emitCast(lhs, *floatType, lhsAstNode);
+    emitCast(rhs, *floatType, rhsAstNode);
   } else {
     throw PyriteException("Binary operator for types " + typeToString(lhs) +
                               " and " + typeToString(rhs) + " is invalid",

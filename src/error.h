@@ -6,6 +6,9 @@
 #include <string>
 
 namespace pyrite {
+class PyriteException;
+static void warn(const PyriteException &exception);
+
 class PyriteException {
 public:
   PyriteException(std::string message, size_t line, size_t column)
@@ -22,7 +25,7 @@ private:
   std::string message;
   size_t line, column;
 
-  friend static inline void warn(const PyriteException &);
+  friend void warn(const PyriteException &);
 };
 
 static inline void warn(const std::string &message, size_t line,
