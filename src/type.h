@@ -349,6 +349,8 @@ std::string typeToString(const Type &);
 bool typeEquals(const Type &a, const Type &b);
 
 class AstNode;
+class AstMetadata;
+class UnaryExpressionNode;
 
 void convertTypesForAssignment(std::unique_ptr<AstNode> &rhsAstNode,
                                const Type &lhs, const Type &rhs);
@@ -357,7 +359,8 @@ void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
                                    const Type &lhs, const Type &rhs,
                                    const AstMetadata &expressionMetadata);
 void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &valueAstNode,
-                                  const Type &operand, UnaryOperator op);
+                                  const Type &operand,
+                                  const UnaryExpressionNode &unaryExpression);
 } // namespace pyrite
 
 #endif

@@ -708,6 +708,10 @@ static_assert(!std::is_abstract_v<PartialAstToAstTransformerVisitor>,
               "required methods from AstTransformVisitor");
 
 std::string astToString(const AstNode &);
+
+// Assigns types to expressions, checks them against the expected types, and
+// performs implicit conversions.
+std::unique_ptr<AstNode> typeCheck(const AstNode &ast);
 } // namespace pyrite
 
 #endif

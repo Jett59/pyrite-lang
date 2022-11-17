@@ -1,4 +1,5 @@
 #include "ast.h"
+#include "error.h"
 #include <string>
 
 namespace pyrite {
@@ -162,5 +163,210 @@ private:
 std::string astToString(const AstNode &node) {
   AstToStringTransformer transformer;
   return transformer.visit(node);
+}
+
+class TypeCheckTransformer : public AstToAstTransformVisitor {
+private:
+  AstMetadata cloneMetadata(const AstNode &node) {
+    return node.getMetadata().clone();
+  }
+  AstMetadata setType(const AstMetadata &original, std::unique_ptr<Type> type) {
+    AstMetadata result = original.clone();
+    result.valueType = std::move(type);
+    return result;
+  }
+
+public:
+  ValueType visitCompilationUnit(const CompilationUnitNode &node) override {
+    std::vector<std::unique_ptr<AstNode>> newDefinitions;
+    for (auto &definition : node.getDefinitions()) {
+      newDefinitions.push_back(visit(*definition));
+    }
+    return std::make_unique<CompilationUnitNode>(std::move(newDefinitions),
+                                                 cloneMetadata(node));
+  }
+  ValueType
+  visitVariableDefinition(const VariableDefinitionNode &node) override {
+    const auto &type = *node.getType();
+    auto initializer = visit(*node.getInitializer());
+    const auto &initializerType = **initializer->getMetadata().valueType;
+    convertTypesForAssignment(initializer, type, initializerType);
+    auto valueType = cloneType(type);
+    if (valueType->getTypeClass() != TypeClass::REFERENCE) {
+      valueType = std::make_unique<ReferenceType>(std::move(valueType),
+                                                  !node.getMutable());
+    } else if (node.getMutable()) {
+      throw PyriteException("Variable of reference type may not be mutable",
+                            node.getMetadata());
+    }
+    return std::make_unique<VariableDefinitionNode>(
+        cloneType(type), node.getName(), std::move(initializer),
+        node.getMutable(), setType(node.getMetadata(), std::move(valueType)));
+  }
+  ValueType
+  visitFunctionDefinition(const FunctionDefinitionNode &node) override {
+    auto returnType = cloneType(*node.getReturnType());
+    std::vector<std::unique_ptr<Type>> parameterTypes;
+    std::vector<NameAndType> newParameters;
+    for (auto &parameter : node.getParameters()) {
+      newParameters.push_back(
+          NameAndType{parameter.name, cloneType(*parameter.type)});
+      parameterTypes.push_back(cloneType(*parameter.type));
+    }
+    auto body = visit(*node.getBody());
+    return std::make_unique<FunctionDefinitionNode>(
+        node.getName(), std::move(newParameters),
+        cloneType(*node.getReturnType()), std::move(body),
+        setType(node.getMetadata(),
+                std::make_unique<ReferenceType>(
+                    std::make_unique<FunctionType>(std::move(returnType),
+                                                   std::move(parameterTypes)),
+                    true)));
+  }
+  ValueType visitIntegerLiteral(const IntegerLiteralNode &node) override {
+    return std::make_unique<IntegerLiteralNode>(
+        node.getValue(),
+        setType(node.getMetadata(), std::make_unique<IntegerType>(32, true)));
+  }
+  ValueType visitFloatLiteral(const FloatLiteralNode &node) override {
+    return std::make_unique<FloatLiteralNode>(
+        node.getValue(),
+        setType(node.getMetadata(), std::make_unique<FloatType>(64)));
+  }
+  ValueType visitStringLiteral(const StringLiteralNode &node) override {
+    return std::make_unique<StringLiteralNode>(
+        node.getValue(), setType(node.getMetadata(),
+                                 std::make_unique<ArrayType>(
+                                     std::make_unique<IntegerType>(8, true))));
+  }
+  ValueType visitBooleanLiteral(const BooleanLiteralNode &node) override {
+    return std::make_unique<BooleanLiteralNode>(
+        node.getValue(),
+        setType(node.getMetadata(), std::make_unique<BooleanType>()));
+  }
+  ValueType visitCharLiteral(const CharLiteralNode &node) override {
+    return std::make_unique<CharLiteralNode>(
+        node.getValue(),
+        setType(node.getMetadata(), std::make_unique<CharType>()));
+  }
+  ValueType visitReturnStatement(const ReturnStatementNode &node) override {
+    auto value = visit(*node.getExpression());
+    return std::make_unique<ReturnStatementNode>(std::move(value),
+                                                 cloneMetadata(node));
+  }
+  ValueType visitBlockStatement(const BlockStatementNode &node) override {
+    std::vector<std::unique_ptr<AstNode>> newStatements;
+    for (auto &statement : node.getStatements()) {
+      newStatements.push_back(visit(*statement));
+    }
+    return std::make_unique<BlockStatementNode>(std::move(newStatements),
+                                                cloneMetadata(node));
+  }
+  ValueType visitIfStatement(const IfStatementNode &node) override {
+    auto condition = visit(*node.getCondition());
+    auto thenStatement = visit(*node.getThenStatement());
+    std::unique_ptr<AstNode> elseStatement;
+    if (node.getElseStatement()) {
+      elseStatement = visit(*node.getElseStatement());
+    }
+    return std::make_unique<IfStatementNode>(
+        std::move(condition), std::move(thenStatement),
+        std::move(elseStatement), cloneMetadata(node));
+  }
+  ValueType visitWhileStatement(const WhileStatementNode &node) override {
+    auto condition = visit(*node.getCondition());
+    auto body = visit(*node.getBody());
+    return std::make_unique<WhileStatementNode>(
+        std::move(condition), std::move(body), cloneMetadata(node));
+  }
+  ValueType visitBinaryExpression(const BinaryExpressionNode &node) override {
+    auto lhs = visit(*node.getLeft());
+    auto rhs = visit(*node.getRight());
+    convertTypesForBinaryOperator(lhs, rhs, **lhs->getMetadata().valueType,
+                                  **rhs->getMetadata().valueType,
+                                  node.getMetadata());
+    return std::make_unique<BinaryExpressionNode>(
+        node.getOp(), std::move(lhs), std::move(rhs), cloneMetadata(node));
+  }
+  ValueType visitUnaryExpression(const UnaryExpressionNode &node) override {
+    auto operand = visit(*node.getOperand());
+    convertTypesForUnaryOperator(operand, **operand->getMetadata().valueType,
+                                 node);
+    return std::make_unique<UnaryExpressionNode>(
+        node.getOp(), std::move(operand), cloneMetadata(node));
+  }
+  ValueType visitVariableReference(const VariableReferenceNode &node) override {
+    const auto &name = node.getName();
+    // Go through the symbol table backwards to get the most recent definition.
+    for (auto symbolTableLevel = symbolTable.rbegin();
+         symbolTableLevel != symbolTable.rend(); ++symbolTableLevel) {
+      auto symbolTableEntry = symbolTableLevel->find(name);
+      if (symbolTableEntry != symbolTableLevel->end()) {
+        const auto &definition = symbolTableEntry->second;
+        return std::make_unique<VariableReferenceNode>(
+            name, setType(node.getMetadata(),
+                          cloneType(**definition.getMetadata().valueType)));
+      }
+    }
+    throw PyriteException(name + " is not defined", node.getMetadata());
+  }
+  ValueType visitFunctionCall(const FunctionCallNode &node) override {
+    auto newFunction = visit(*node.getFunction());
+    std::vector<std::unique_ptr<AstNode>> newArguments;
+    for (auto &argument : node.getArguments()) {
+      newArguments.push_back(visit(*argument));
+    }
+    const auto &functionValueType = **newFunction->getMetadata().valueType;
+    if (functionValueType.getTypeClass() != TypeClass::FUNCTION) {
+      throw PyriteException("Cannot call a non-function", node.getMetadata());
+    }
+    const auto &functionType =
+        static_cast<const FunctionType &>(functionValueType);
+    auto newReturnType = cloneType(functionType.getReturnType());
+    return std::make_unique<FunctionCallNode>(
+        std::move(newFunction), std::move(newArguments),
+        setType(node.getMetadata(), std::move(newReturnType)));
+  }
+  ValueType visitAssignment(const AssignmentNode &node) override {
+    auto newLhs = visit(*node.getLhs());
+    auto newRhs = visit(*node.getRhs());
+    convertTypesForAssignment(newRhs, **newLhs->getMetadata().valueType,
+                              **newRhs->getMetadata().valueType);
+    auto valueType = cloneType(**newLhs->getMetadata().valueType);
+    return std::make_unique<AssignmentNode>(
+        std::move(newLhs), std::move(newRhs), node.getAdditionalOperator(),
+        setType(node.getMetadata(), std::move(valueType)));
+  }
+  ValueType visitDereference(const DereferenceNode &node) override {
+    auto newReference = visit(*node.getValue());
+    const auto &referenceValueType = **newReference->getMetadata().valueType;
+    if (referenceValueType.getTypeClass() != TypeClass::REFERENCE) {
+      throw PyriteException("Cannot dereference a non-reference of type " +
+                                typeToString(referenceValueType),
+                            node.getMetadata());
+    }
+    const auto &referenceType =
+        static_cast<const ReferenceType &>(referenceValueType);
+    auto newValueType = cloneType(referenceType.getReferencedType());
+    return std::make_unique<DereferenceNode>(
+        std::move(newReference),
+        setType(node.getMetadata(), std::move(newValueType)));
+  }
+  ValueType visitCast(const CastNode &node) override {
+    auto newValue = visit(*node.getValue());
+    const auto &originalValueType = **newValue->getMetadata().valueType;
+    auto newType = cloneType(*node.getType());
+    return std::make_unique<CastNode>(
+        std::move(newValue), std::move(newType),
+        setType(node.getMetadata(), std::move(newType)));
+  }
+
+private:
+  std::vector<std::map<std::string, const AstNode &>> symbolTable;
+};
+
+std::unique_ptr<AstNode> typeCheck(const AstNode &ast) {
+  TypeCheckTransformer transformer;
+  return transformer.visit(ast);
 }
 } // namespace pyrite

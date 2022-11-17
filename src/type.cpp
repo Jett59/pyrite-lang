@@ -227,6 +227,9 @@ public:
 private:
   const Type &other;
 };
+bool typeEquals(const Type &a, const Type &b) {
+  return TypesEqualTransformer{a}.visit(b);
+}
 
 static PyriteException typeMismatch(const Type &expected, const Type &actual,
                                     const AstMetadata &astMetadata) {
@@ -351,7 +354,9 @@ void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
   }
 }
 void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &valueAstNode,
-                                  const Type &type, UnaryOperator op) {
+                                  const Type &type,
+                                  const UnaryExpressionNode &unaryExpression) {
+  UnaryOperator op = unaryExpression.getOp();
   // Unary expressions don't work with references.
   removeReference(type, valueAstNode);
   if (type.getTypeClass() == TypeClass::INTEGER) {
