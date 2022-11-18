@@ -1,9 +1,3 @@
-any(u64|bool) thingo = 123;
-i32 greet(enum(good|bad) mood) {
-    123 + (456 - 3);
-    any thingy = thing;
-    void func() {
-        42;
-    }
-    return 75;
+void add(i32 a, i32 b, i64 c) {
+    return a * b + c;
 }

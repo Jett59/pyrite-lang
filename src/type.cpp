@@ -239,7 +239,7 @@ static PyriteException typeMismatch(const Type &expected, const Type &actual,
 }
 static PyriteException incompatibleTypes(const Type &a, const Type &b,
                                          const AstMetadata &metadata) {
-  return PyriteException("Type mismatch: type " + typeToString(a) +
+  return PyriteException("Type mismatch: " + typeToString(a) +
                              " is not compatible with " + typeToString(b),
                          metadata);
 }
@@ -256,7 +256,7 @@ static PyriteException lossyConvertion(const Type &from, const Type &to,
                          metadata);
 }
 
-static bool emitCast(const Type &from, const Type &to,
+static void emitCast(const Type &from, const Type &to,
                      std::unique_ptr<AstNode> &astNode) {
   bool canCast = false;
   bool typesEqual = false;
@@ -269,10 +269,9 @@ static bool emitCast(const Type &from, const Type &to,
     const UnionType &unionToType = static_cast<const UnionType &>(to);
     for (const auto &option : unionToType.getOptions()) {
       try {
-        if (emitCast(from, *option, astNode)) {
-          canCast = true;
-          break;
-        }
+        emitCast(from, *option, astNode);
+        canCast = true;
+        break;
       } catch (const PyriteException &) {
         // Do nothing. We just don't want to give these kinds of errors if we
         // could find another match.
@@ -316,13 +315,16 @@ static bool emitCast(const Type &from, const Type &to,
     }
     canCast = true;
   }
-  if (canCast && !typesEqual) {
-    AstMetadata newMetadata = astNode->getMetadata().clone();
-    newMetadata.valueType = cloneType(to);
-    astNode = std::make_unique<CastNode>(std::move(astNode), cloneType(to),
-                                         std::move(newMetadata));
+  if (!typesEqual) {
+    if (canCast) {
+      AstMetadata newMetadata = astNode->getMetadata().clone();
+      newMetadata.valueType = cloneType(to);
+      astNode = std::make_unique<CastNode>(std::move(astNode), cloneType(to),
+                                           std::move(newMetadata));
+    } else {
+      throw typeMismatch(from, to, astNode->getMetadata());
+    }
   }
-  return canCast;
 }
 
 void removeReference(const Type &type, std::unique_ptr<AstNode> &astNode) {
@@ -346,46 +348,48 @@ void convertTypesForAssignment(std::unique_ptr<AstNode> &rhsAstNode,
   }
   emitCast(*rhsType, *lhsType, rhsAstNode);
   rhsType = &**rhsAstNode->getMetadata().valueType;
-  if (!typeEquals(*lhsType, *rhsType)) {
-    throw typeMismatch(*lhsType, *rhsType, rhsAstNode->getMetadata());
-  }
 }
 void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
                                    std::unique_ptr<AstNode> &rhsAstNode,
                                    const Type &lhs, const Type &rhs,
                                    const AstMetadata &expressionMetadata) {
-  // Binary expressions don't work with references.
-  removeReference(lhs, lhsAstNode);
-  removeReference(rhs, rhsAstNode);
-  if (lhs.getTypeClass() != rhs.getTypeClass()) {
-    throw incompatibleTypes(lhs, rhs, expressionMetadata);
+  // Binary expressions don't like references. If they did, then it would've
+  // already been replaced with a function call to a user-defined operator.
+  const Type *lhsType = &lhs;
+  const Type *rhsType = &rhs;
+  removeReference(*lhsType, lhsAstNode);
+  removeReference(*rhsType, rhsAstNode);
+  lhsType = &**lhsAstNode->getMetadata().valueType;
+  rhsType = &**rhsAstNode->getMetadata().valueType;
+  if (lhsType->getTypeClass() != rhsType->getTypeClass()) {
+    throw incompatibleTypes(*lhsType, *rhsType, expressionMetadata);
   }
-  if (lhs.getTypeClass() == TypeClass::INTEGER) {
-    const auto &lhsInteger = static_cast<const IntegerType &>(lhs);
-    const auto &rhsInteger = static_cast<const IntegerType &>(rhs);
+  if (lhsType->getTypeClass() == TypeClass::INTEGER) {
+    const auto &lhsInteger = static_cast<const IntegerType &>(*lhsType);
+    const auto &rhsInteger = static_cast<const IntegerType &>(*rhsType);
     std::unique_ptr<Type> integerType = std::make_unique<IntegerType>(
         std::max(lhsInteger.getBits(), rhsInteger.getBits()),
         std::max(lhsInteger.getSigned(), rhsInteger.getSigned()));
-    emitCast(lhs, *integerType, lhsAstNode);
-    emitCast(rhs, *integerType, rhsAstNode);
-  } else if (lhs.getTypeClass() == TypeClass::FLOAT) {
-    const auto &lhsFloat = static_cast<const FloatType &>(lhs);
-    const auto &rhsFloat = static_cast<const FloatType &>(rhs);
+    emitCast(*lhsType, *integerType, lhsAstNode);
+    emitCast(*rhsType, *integerType, rhsAstNode);
+  } else if (lhsType->getTypeClass() == TypeClass::FLOAT) {
+    const auto &lhsFloat = static_cast<const FloatType &>(*lhsType);
+    const auto &rhsFloat = static_cast<const FloatType &>(*rhsType);
     std::unique_ptr<Type> floatType = std::make_unique<FloatType>(
         std::max(lhsFloat.getBits(), rhsFloat.getBits()));
-    emitCast(lhs, *floatType, lhsAstNode);
-    emitCast(rhs, *floatType, rhsAstNode);
+    emitCast(*lhsType, *floatType, lhsAstNode);
+    emitCast(*rhsType, *floatType, rhsAstNode);
   } else {
-    throw PyriteException("Binary operator for types " + typeToString(lhs) +
-                              " and " + typeToString(rhs) + " is invalid",
-                          expressionMetadata);
+    throw PyriteException(
+        "Invalid operands for binary operator: " + typeToString(*lhsType) +
+            " and " + typeToString(*rhsType),
+        expressionMetadata);
   }
 }
 void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &valueAstNode,
                                   const Type &type,
                                   const UnaryExpressionNode &unaryExpression) {
   UnaryOperator op = unaryExpression.getOp();
-  // Unary expressions don't work with references.
   removeReference(type, valueAstNode);
   if (type.getTypeClass() == TypeClass::INTEGER) {
     const auto &integer = static_cast<const IntegerType &>(type);
@@ -394,8 +398,8 @@ void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &valueAstNode,
                             valueAstNode->getMetadata());
     }
   } else if (type.getTypeClass() != TypeClass::FLOAT) {
-    throw PyriteException("Unary operator for type " + typeToString(type) +
-                              " is invalid",
+    throw PyriteException("Invalid operand for unary operator: " +
+                              typeToString(type),
                           valueAstNode->getMetadata());
   }
 }

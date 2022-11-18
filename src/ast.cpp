@@ -187,35 +187,53 @@ public:
     return std::make_unique<CompilationUnitNode>(std::move(newDefinitions),
                                                  cloneMetadata(node));
   }
+
+  std::unique_ptr<Type>
+  getVariableDefinitionValueType(std::unique_ptr<Type> type, bool isConstant,
+                                 const AstMetadata &metadata) {
+    if (type->getTypeClass() == TypeClass::REFERENCE) {
+      if (!isConstant) {
+        throw PyriteException("Reference variable must be constant", metadata);
+      }
+      return type;
+    } else {
+      return std::make_unique<ReferenceType>(std::move(type), isConstant);
+    }
+  }
+
   ValueType
   visitVariableDefinition(const VariableDefinitionNode &node) override {
     const auto &type = *node.getType();
     auto initializer = visit(*node.getInitializer());
     const auto &initializerType = **initializer->getMetadata().valueType;
     convertTypesForAssignment(initializer, type, initializerType);
-    auto valueType = cloneType(type);
-    if (valueType->getTypeClass() != TypeClass::REFERENCE) {
-      valueType = std::make_unique<ReferenceType>(std::move(valueType),
-                                                  !node.getMutable());
-    } else if (node.getMutable()) {
-      throw PyriteException("Variable of reference type may not be mutable",
-                            node.getMetadata());
-    }
+    auto valueType = getVariableDefinitionValueType(
+        cloneType(type), !node.getMutable(), node.getMetadata());
     auto result = std::make_unique<VariableDefinitionNode>(
         cloneType(type), node.getName(), std::move(initializer),
         node.getMutable(), setType(node.getMetadata(), std::move(valueType)));
     symbolTable.back().insert({node.getName(), *result});
-    return std::move(result);
+    return result;
   }
   ValueType
   visitFunctionDefinition(const FunctionDefinitionNode &node) override {
+    symbolTable.push_back({});
     auto returnType = cloneType(*node.getReturnType());
     std::vector<std::unique_ptr<Type>> parameterTypes;
     std::vector<NameAndType> newParameters;
+    std::vector<std::unique_ptr<VariableDefinitionNode>>
+        parameterVariables; // Houses the values in the symbol table.
     for (auto &parameter : node.getParameters()) {
       newParameters.push_back(
           NameAndType{parameter.name, cloneType(*parameter.type)});
       parameterTypes.push_back(cloneType(*parameter.type));
+      AstMetadata parameterVariableMetadata;
+      parameterVariableMetadata.valueType = getVariableDefinitionValueType(
+          cloneType(*parameter.type), true, parameterVariableMetadata);
+      parameterVariables.push_back(std::make_unique<VariableDefinitionNode>(
+          cloneType(*parameter.type), parameter.name,
+          std::unique_ptr<AstNode>(nullptr), false, std::move(parameterVariableMetadata)));
+      symbolTable.back().insert({parameter.name, *parameterVariables.back()});
     }
     auto body = visit(*node.getBody());
     auto result = std::make_unique<FunctionDefinitionNode>(
@@ -226,6 +244,7 @@ public:
                     std::make_unique<FunctionType>(std::move(returnType),
                                                    std::move(parameterTypes)),
                     true)));
+    symbolTable.pop_back();
     symbolTable.back().insert({node.getName(), *result});
     return std::move(result);
   }
