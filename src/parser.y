@@ -88,7 +88,7 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %type <std::vector<std::string>> piped-identifier-list
 
 %type <std::unique_ptr<AstNode>> definition expression statement block-statement
-%type <std::vector<std::unique_ptr<AstNode>>> definitions statement-list
+%type <std::vector<std::unique_ptr<AstNode>>> definitions statement-list expression-list
 
 %type <std::unique_ptr<Type>> type
 %type <std::vector<std::unique_ptr<Type>>> piped-type-list
@@ -102,6 +102,9 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %left "+" "-"
 %left "*" "/" "%"
 %left "|" "^" "&"
+
+/* For function call operator */
+%left "("
 
 %%
 
@@ -261,6 +264,9 @@ INTEGER_LITERAL {
     node->getMetadata().parennedExpression = true;
     $$ = std::move(node);
 }
+| expression "(" expression-list ")" {
+    $$ = std::make_unique<FunctionCallNode>($1, $3, createMetadata(@1));
+}
 | expression "+" expression {
     $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::ADD, $1, $3, createMetadata(@1));
 }
@@ -293,6 +299,18 @@ INTEGER_LITERAL {
 }
 | expression ">=" expression {
     $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::GREATER_THAN_OR_EQUAL, $1, $3, createMetadata(@1));
+}
+
+expression-list: /* empty */ {
+    /* Bison default-initializes it automatically */
+}
+| expression {
+    $$.push_back($1);
+}
+| expression-list "," expression {
+    auto list = $1;
+    list.push_back($3);
+    $$ = std::move(list);
 }
 
 piped-identifier-list: IDENTIFIER {

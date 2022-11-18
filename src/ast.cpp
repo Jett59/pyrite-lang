@@ -354,11 +354,29 @@ public:
       newArguments.push_back(visit(*argument));
     }
     const auto &functionValueType = **newFunction->getMetadata().valueType;
-    if (functionValueType.getTypeClass() != TypeClass::FUNCTION) {
+    if (functionValueType.getTypeClass() != TypeClass::REFERENCE) {
       throw PyriteException("Cannot call a non-function", node.getMetadata());
     }
-    const auto &functionType =
-        static_cast<const FunctionType &>(functionValueType);
+    const auto &functionReferenceType =
+        static_cast<const ReferenceType &>(functionValueType);
+    if (functionReferenceType.getReferencedType().getTypeClass() !=
+        TypeClass::FUNCTION) {
+      throw PyriteException("Cannot call a non-function", node.getMetadata());
+    }
+    const auto &functionType = static_cast<const FunctionType &>(
+        functionReferenceType.getReferencedType());
+    if (newArguments.size() != functionType.getParameters().size()) {
+      throw PyriteException(
+          "Incorrect number of arguments to function call: expected " +
+              std::to_string(functionType.getParameters().size()) + ", got " +
+              std::to_string(newArguments.size()),
+          node.getMetadata());
+    }
+    for (size_t i = 0; i < newArguments.size(); ++i) {
+      convertTypesForAssignment(newArguments[i],
+                                *functionType.getParameters()[i],
+                                **newArguments[i]->getMetadata().valueType);
+    }
     auto newReturnType = cloneType(functionType.getReturnType());
     return std::make_unique<FunctionCallNode>(
         std::move(newFunction), std::move(newArguments),

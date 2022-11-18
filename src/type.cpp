@@ -280,7 +280,6 @@ static void emitCast(const Type &from, const Type &to,
   } else if (to.getTypeClass() == TypeClass::INTEGER &&
              from.getTypeClass() == TypeClass::INTEGER) {
     const IntegerType &integerToType = static_cast<const IntegerType &>(to);
-    bool convertedLiteral = false;
     if (astNode->getNodeType() == AstNodeType::INTEGER_LITERAL) {
       const IntegerLiteralNode &integerLiteral =
           static_cast<const IntegerLiteralNode &>(*astNode);
@@ -292,10 +291,11 @@ static void emitCast(const Type &from, const Type &to,
         // Dirty, but we can just set the type on the metadata here which avoids
         // excess copying.
         astNode->getMetadata().valueType = cloneType(integerToType);
-        convertedLiteral = true;
+        typesEqual = true;
       }
     }
-    if (!convertedLiteral) {
+    // typesEqual will be true if we can cast the integer literal.
+    if (!typesEqual) {
       const IntegerType &integerFromType =
           static_cast<const IntegerType &>(from);
       if (integerToType.getBits() < integerFromType.getBits()) {
