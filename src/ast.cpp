@@ -197,7 +197,8 @@ public:
                                  const AstMetadata &metadata) {
     if (type->getTypeClass() == TypeClass::REFERENCE) {
       if (!isConstant) {
-        throw PyriteException("Reference variable must be constant", metadata);
+        errors.push_back(
+            PyriteError("Reference variable must be constant", metadata));
       }
       return type;
     } else {
@@ -281,24 +282,26 @@ public:
         setType(node.getMetadata(), std::make_unique<CharType>()));
   }
   ValueType visitReturnStatement(const ReturnStatementNode &node) override {
-    if (parentFunctions.size() < 1) {
-      throw PyriteException("Return statement outside of function",
-                            node.getMetadata());
-    }
     std::optional<ValueType> newValue = std::nullopt;
-    const FunctionDefinitionNode &parentFunction = *parentFunctions.back();
-    if (node.getExpression()) {
-      newValue = visit(**node.getExpression());
-      if (parentFunction.getReturnType()->getTypeClass() == TypeClass::VOID) {
-        throw PyriteException("Void function may not return a value",
-                              node.getMetadata());
-      }
-      convertTypesForAssignment(*newValue, *parentFunction.getReturnType(),
-                                **(*newValue)->getMetadata().valueType);
+    if (parentFunctions.size() < 1) {
+      errors.push_back(PyriteError("Return statement outside of function",
+                                   node.getMetadata()));
     } else {
-      if (parentFunction.getReturnType()->getTypeClass() != TypeClass::VOID) {
-        throw PyriteException("Return statement must return a value",
-                              node.getMetadata());
+      const FunctionDefinitionNode &parentFunction = *parentFunctions.back();
+      if (node.getExpression()) {
+        newValue = visit(**node.getExpression());
+        if (parentFunction.getReturnType()->getTypeClass() == TypeClass::VOID) {
+          errors.push_back(PyriteError("Void function may not return a value",
+                                       node.getMetadata()));
+        } else {
+          convertTypesForAssignment(*newValue, *parentFunction.getReturnType(),
+                                    **(*newValue)->getMetadata().valueType);
+        }
+      } else {
+        if (parentFunction.getReturnType()->getTypeClass() != TypeClass::VOID) {
+          errors.push_back(PyriteError("Return statement must return a value",
+                                       node.getMetadata()));
+        }
       }
     }
     return std::make_unique<ReturnStatementNode>(std::move(newValue),
@@ -364,7 +367,9 @@ public:
                           cloneType(**definition.getMetadata().valueType)));
       }
     }
-    throw PyriteException(name + " is not defined", node.getMetadata());
+    errors.push_back(PyriteError(name + " is not defined", node.getMetadata()));
+    return std::make_unique<VariableReferenceNode>(
+        name, setType(node.getMetadata(), std::make_unique<VoidType>()));
   }
   ValueType visitFunctionCall(const FunctionCallNode &node) override {
     auto newFunction = visit(*node.getFunction());
@@ -374,27 +379,36 @@ public:
     }
     const auto &functionValueType = **newFunction->getMetadata().valueType;
     if (functionValueType.getTypeClass() != TypeClass::REFERENCE) {
-      throw PyriteException("Cannot call a non-function", node.getMetadata());
+      errors.push_back(
+          PyriteError("Cannot call a non-function", node.getMetadata()));
+      return std::make_unique<FunctionCallNode>(
+          std::move(newFunction), std::move(newArguments),
+          setType(node.getMetadata(), std::make_unique<VoidType>()));
     }
     const auto &functionReferenceType =
         static_cast<const ReferenceType &>(functionValueType);
     if (functionReferenceType.getReferencedType().getTypeClass() !=
         TypeClass::FUNCTION) {
-      throw PyriteException("Cannot call a non-function", node.getMetadata());
+      errors.push_back(
+          PyriteError("Cannot call a non-function", node.getMetadata()));
+      return std::make_unique<FunctionCallNode>(
+          std::move(newFunction), std::move(newArguments),
+          setType(node.getMetadata(), std::make_unique<VoidType>()));
     }
     const auto &functionType = static_cast<const FunctionType &>(
         functionReferenceType.getReferencedType());
     if (newArguments.size() != functionType.getParameters().size()) {
-      throw PyriteException(
+      errors.push_back(PyriteError(
           "Incorrect number of arguments to function call: expected " +
               std::to_string(functionType.getParameters().size()) + ", got " +
               std::to_string(newArguments.size()),
-          node.getMetadata());
-    }
-    for (size_t i = 0; i < newArguments.size(); ++i) {
-      convertTypesForAssignment(newArguments[i],
-                                *functionType.getParameters()[i],
-                                **newArguments[i]->getMetadata().valueType);
+          node.getMetadata()));
+    } else {
+      for (size_t i = 0; i < newArguments.size(); ++i) {
+        convertTypesForAssignment(newArguments[i],
+                                  *functionType.getParameters()[i],
+                                  **newArguments[i]->getMetadata().valueType);
+      }
     }
     auto newReturnType = cloneType(functionType.getReturnType());
     return std::make_unique<FunctionCallNode>(
@@ -415,9 +429,10 @@ public:
     auto newReference = visit(*node.getValue());
     const auto &referenceValueType = **newReference->getMetadata().valueType;
     if (referenceValueType.getTypeClass() != TypeClass::REFERENCE) {
-      throw PyriteException("Cannot dereference a non-reference of type " +
-                                typeToString(referenceValueType),
-                            node.getMetadata());
+      errors.push_back(
+          PyriteError("Cannot dereference a non-reference of type " +
+                          typeToString(referenceValueType),
+                      node.getMetadata()));
     }
     const auto &referenceType =
         static_cast<const ReferenceType &>(referenceValueType);

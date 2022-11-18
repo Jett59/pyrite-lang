@@ -7,6 +7,9 @@
 #include <string>
 
 using namespace pyrite;
+namespace pyrite {
+std::vector<PyriteError> errors;
+}
 
 struct Options {
   std::string fileName;
@@ -78,8 +81,16 @@ int main(int argc, const char **argv) {
       Parser parser(lexer, argv[0], &ast);
       parser.parse();
       ast = typeCheck(*ast);
+      if (errors.size() > 0) {
+        for (const auto &error : errors) {
+          std::cerr << error.getMessage() << std::endl;
+        }
+        std:: cerr << errors.size() << " errors" << std::endl;
+        return 1;
+      }
       std::cout << astToString(*ast) << std::endl;
-    } catch (const PyriteException &exception) {
+    } catch (const PyriteError &exception) {
+      std::cerr << "Error thrown:" << std::endl;
       std::cerr << exception.getMessage() << std::endl;
       return 1;
     }

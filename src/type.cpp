@@ -231,33 +231,34 @@ bool typeEquals(const Type &a, const Type &b) {
   return TypesEqualTransformer{a}.visit(b);
 }
 
-static PyriteException typeMismatch(const Type &expected, const Type &actual,
-                                    const AstMetadata &astMetadata) {
-  return PyriteException("Type mismatch: expected " + typeToString(expected) +
-                             ", got " + typeToString(actual),
-                         astMetadata);
+static PyriteError typeMismatch(const Type &expected, const Type &actual,
+                                const AstMetadata &astMetadata) {
+  return PyriteError("Type mismatch: expected " + typeToString(expected) +
+                         ", got " + typeToString(actual),
+                     astMetadata);
 }
-static PyriteException incompatibleTypes(const Type &a, const Type &b,
-                                         const AstMetadata &metadata) {
-  return PyriteException("Type mismatch: " + typeToString(a) +
-                             " is not compatible with " + typeToString(b),
-                         metadata);
+static PyriteError incompatibleTypes(const Type &a, const Type &b,
+                                     const AstMetadata &metadata) {
+  return PyriteError("Type mismatch: " + typeToString(a) +
+                         " is not compatible with " + typeToString(b),
+                     metadata);
 }
-static PyriteException convertionBetweenSigns(const Type &a, const Type &b,
-                                              const AstMetadata &metadata) {
-  return PyriteException("Cannot convert between " + typeToString(a) + " and " +
-                             typeToString(b) + " of different sign",
-                         metadata);
+static PyriteError convertionBetweenSigns(const Type &a, const Type &b,
+                                          const AstMetadata &metadata) {
+  return PyriteError("Cannot convert between " + typeToString(a) + " and " +
+                         typeToString(b) + " of different sign",
+                     metadata);
 }
-static PyriteException lossyConvertion(const Type &from, const Type &to,
-                                       const AstMetadata &metadata) {
-  return PyriteException("Converting from " + typeToString(from) + " to " +
-                             typeToString(to) + " loses precision",
-                         metadata);
+static PyriteError lossyConvertion(const Type &from, const Type &to,
+                                   const AstMetadata &metadata) {
+  return PyriteError("Converting from " + typeToString(from) + " to " +
+                         typeToString(to) + " loses precision",
+                     metadata);
 }
 
-static void emitCast(const Type &from, const Type &to,
-                     std::unique_ptr<AstNode> &astNode) {
+static bool emitCast(const Type &from, const Type &to,
+                     std::unique_ptr<AstNode> &astNode,
+                     bool emitErrors = true) {
   bool canCast = false;
   bool typesEqual = false;
   if (typeEquals(to, from)) {
@@ -268,13 +269,9 @@ static void emitCast(const Type &from, const Type &to,
   } else if (to.getTypeClass() == TypeClass::UNION) {
     const UnionType &unionToType = static_cast<const UnionType &>(to);
     for (const auto &option : unionToType.getOptions()) {
-      try {
-        emitCast(from, *option, astNode);
+      if (emitCast(from, *option, astNode, false)) {
         canCast = true;
         break;
-      } catch (const PyriteException &) {
-        // Do nothing. We just don't want to give these kinds of errors if we
-        // could find another match.
       }
     }
   } else if (to.getTypeClass() == TypeClass::INTEGER &&
@@ -299,10 +296,15 @@ static void emitCast(const Type &from, const Type &to,
       const IntegerType &integerFromType =
           static_cast<const IntegerType &>(from);
       if (integerToType.getBits() < integerFromType.getBits()) {
-        throw lossyConvertion(from, to, astNode->getMetadata());
+        if (emitErrors) {
+          errors.push_back(lossyConvertion(from, to, astNode->getMetadata()));
+        }
       }
       if (integerToType.getSigned() != integerFromType.getSigned()) {
-        throw convertionBetweenSigns(from, to, astNode->getMetadata());
+        if (emitErrors) {
+          errors.push_back(
+              convertionBetweenSigns(from, to, astNode->getMetadata()));
+        }
       }
       canCast = true;
     }
@@ -311,7 +313,9 @@ static void emitCast(const Type &from, const Type &to,
     const FloatType &floatToType = static_cast<const FloatType &>(to);
     const FloatType &floatFromType = static_cast<const FloatType &>(from);
     if (floatToType.getBits() < floatFromType.getBits()) {
-      throw lossyConvertion(from, to, astNode->getMetadata());
+      if (emitErrors) {
+        errors.push_back(lossyConvertion(from, to, astNode->getMetadata()));
+      }
     }
     canCast = true;
   }
@@ -322,9 +326,12 @@ static void emitCast(const Type &from, const Type &to,
       astNode = std::make_unique<CastNode>(std::move(astNode), cloneType(to),
                                            std::move(newMetadata));
     } else {
-      throw typeMismatch(from, to, astNode->getMetadata());
+      if (emitErrors) {
+        errors.push_back(typeMismatch(to, from, astNode->getMetadata()));
+      }
     }
   }
+  return canCast || typesEqual;
 }
 
 void removeReference(const Type &type, std::unique_ptr<AstNode> &astNode) {
@@ -362,7 +369,7 @@ void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
   lhsType = &**lhsAstNode->getMetadata().valueType;
   rhsType = &**rhsAstNode->getMetadata().valueType;
   if (lhsType->getTypeClass() != rhsType->getTypeClass()) {
-    throw incompatibleTypes(*lhsType, *rhsType, expressionMetadata);
+    errors.push_back(incompatibleTypes(*lhsType, *rhsType, expressionMetadata));
   }
   if (lhsType->getTypeClass() == TypeClass::INTEGER) {
     const auto &lhsInteger = static_cast<const IntegerType &>(*lhsType);
@@ -380,10 +387,10 @@ void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
     emitCast(*lhsType, *floatType, lhsAstNode);
     emitCast(*rhsType, *floatType, rhsAstNode);
   } else {
-    throw PyriteException(
+    errors.push_back(PyriteError(
         "Invalid operands for binary operator: " + typeToString(*lhsType) +
             " and " + typeToString(*rhsType),
-        expressionMetadata);
+        expressionMetadata));
   }
 }
 void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &valueAstNode,
@@ -396,13 +403,13 @@ void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &valueAstNode,
   if (valueType->getTypeClass() == TypeClass::INTEGER) {
     const auto &integer = static_cast<const IntegerType &>(*valueType);
     if (op == UnaryOperator::NEGATE && !integer.getSigned()) {
-      throw PyriteException("Can't negate unsigned integer",
-                            valueAstNode->getMetadata());
+      errors.push_back(PyriteError("Can't negate unsigned integer",
+                                   valueAstNode->getMetadata()));
     }
   } else if (valueType->getTypeClass() != TypeClass::FLOAT) {
-    throw PyriteException("Invalid operand for unary operator: " +
-                              typeToString(*valueType),
-                          valueAstNode->getMetadata());
+    errors.push_back(PyriteError("Invalid operand for unary operator: " +
+                                     typeToString(*valueType),
+                                 valueAstNode->getMetadata()));
   }
 }
 } // namespace pyrite

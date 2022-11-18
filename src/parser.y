@@ -122,6 +122,7 @@ definitions: /* empty */ {
     list.push_back($2);
     $$ = std::move(list);
 }
+| definitions error
 
 definition:
 type IDENTIFIER "=" expression ";" {
@@ -157,6 +158,7 @@ statement-list: /* empty */ {
     list.push_back($2);
     $$ = std::move(list);
 }
+| statement-list error
 
 piped-type-list: type {
     $$.push_back($1);
@@ -336,5 +338,5 @@ piped-identifier-list: IDENTIFIER {
 %%
 
 void pyrite::Parser::error(const pyrite::Parser::location_type& location, const std::string& message) {
-    throw PyriteException(message, location.begin.line, location.begin.column);
+    errors.push_back(PyriteError(message, location.begin.line, location.begin.column));
 }

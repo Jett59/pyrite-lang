@@ -6,14 +6,14 @@
 #include <string>
 
 namespace pyrite {
-class PyriteException;
-static void warn(const PyriteException &exception);
+class PyriteError;
+static void warn(const PyriteError &exception);
 
-class PyriteException {
+class PyriteError {
 public:
-  PyriteException(std::string message, size_t line, size_t column)
+  PyriteError(std::string message, size_t line, size_t column)
       : message(std::move(message)), line(line), column(column) {}
-  PyriteException(std::string message, const AstMetadata &metadata)
+  PyriteError(std::string message, const AstMetadata &metadata)
       : message(std::move(message)), line(metadata.line),
         column(metadata.column) {}
 
@@ -25,8 +25,13 @@ private:
   std::string message;
   size_t line, column;
 
-  friend void warn(const PyriteException &);
+  friend void warn(const PyriteError &);
 };
+
+// I don't think there is an easier way to allow easy access to the list of
+// errors (especially in the parser where I have no control over the arguments
+// passed to yyerror) so a global variable will have to do.
+extern std::vector<PyriteError> errors;
 
 static inline void warn(const std::string &message, size_t line,
                         size_t column) {
@@ -37,7 +42,7 @@ static inline void warn(const std::string &message,
                         const AstMetadata &metadata) {
   warn(message, metadata.line, metadata.column);
 }
-static inline void warn(const PyriteException &exception) {
+static inline void warn(const PyriteError &exception) {
   warn(exception.message, exception.line, exception.column);
 }
 } // namespace pyrite

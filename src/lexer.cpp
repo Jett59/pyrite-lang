@@ -251,6 +251,9 @@ Parser::symbol_type Lexer::nextToken() {
     if (file.eof()) {
       return Parser::make_YYEOF(currentLocation);
     } else {
+      // Move along a character anyway. This prevents infinite loops of misery
+      // as we continuously push out invalid tokens.
+      nextCharacter();
       return Parser::make_YYUNDEF(currentLocation);
     }
   } else {
