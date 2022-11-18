@@ -240,6 +240,7 @@ public:
           std::move(parameterVariableMetadata)));
       symbolTable.back().insert({parameter.name, *parameterVariables.back()});
     }
+    parentFunctions.push_back(&node);
     auto body = visit(*node.getBody());
     auto result = std::make_unique<FunctionDefinitionNode>(
         node.getName(), std::move(newParameters),
@@ -280,9 +281,25 @@ public:
         setType(node.getMetadata(), std::make_unique<CharType>()));
   }
   ValueType visitReturnStatement(const ReturnStatementNode &node) override {
+    if (parentFunctions.size() < 1) {
+      throw PyriteException("Return statement outside of function",
+                            node.getMetadata());
+    }
     std::optional<ValueType> newValue = std::nullopt;
+    const FunctionDefinitionNode &parentFunction = *parentFunctions.back();
     if (node.getExpression()) {
       newValue = visit(**node.getExpression());
+      if (parentFunction.getReturnType()->getTypeClass() == TypeClass::VOID) {
+        throw PyriteException("Void function may not return a value",
+                              node.getMetadata());
+      }
+      convertTypesForAssignment(*newValue, *parentFunction.getReturnType(),
+                                **(*newValue)->getMetadata().valueType);
+    } else {
+      if (parentFunction.getReturnType()->getTypeClass() != TypeClass::VOID) {
+        throw PyriteException("Return statement must return a value",
+                              node.getMetadata());
+      }
     }
     return std::make_unique<ReturnStatementNode>(std::move(newValue),
                                                  cloneMetadata(node));
@@ -418,6 +435,7 @@ public:
 
 private:
   std::vector<std::map<std::string, const AstNode &>> symbolTable;
+  std::vector<const FunctionDefinitionNode *> parentFunctions;
 };
 
 std::unique_ptr<AstNode> typeCheck(const AstNode &ast) {

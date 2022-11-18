@@ -1,6 +1,6 @@
-void add(i32 a, i64 b) {
+i64 add(i32 a, i64 b) {
     return a + b;
 }
-void sub(i32 a, i64 b) {
+i64 sub(i32 a, i64 b) {
     return add(a, 0 - b);
 }
