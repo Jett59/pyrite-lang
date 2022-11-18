@@ -379,8 +379,9 @@ public:
     }
     const auto &functionValueType = **newFunction->getMetadata().valueType;
     if (functionValueType.getTypeClass() != TypeClass::REFERENCE) {
-      errors.push_back(
-          PyriteError("Cannot call a non-function", node.getMetadata()));
+      errors.push_back(PyriteError("Cannot call a value of type " +
+                                       typeToString(functionValueType),
+                                   node.getMetadata()));
       return std::make_unique<FunctionCallNode>(
           std::move(newFunction), std::move(newArguments),
           setType(node.getMetadata(), std::make_unique<VoidType>()));
@@ -389,8 +390,10 @@ public:
         static_cast<const ReferenceType &>(functionValueType);
     if (functionReferenceType.getReferencedType().getTypeClass() !=
         TypeClass::FUNCTION) {
-      errors.push_back(
-          PyriteError("Cannot call a non-function", node.getMetadata()));
+      errors.push_back(PyriteError(
+          "Cannot call a value of type " +
+              typeToString(functionReferenceType.getReferencedType()),
+          node.getMetadata()));
       return std::make_unique<FunctionCallNode>(
           std::move(newFunction), std::move(newArguments),
           setType(node.getMetadata(), std::make_unique<VoidType>()));
