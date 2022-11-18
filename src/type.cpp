@@ -272,14 +272,32 @@ static bool emitCast(const Type &from, const Type &to,
   } else if (to.getTypeClass() == TypeClass::INTEGER &&
              from.getTypeClass() == TypeClass::INTEGER) {
     const IntegerType &integerToType = static_cast<const IntegerType &>(to);
-    const IntegerType &integerFromType = static_cast<const IntegerType &>(from);
-    if (integerToType.getBits() < integerFromType.getBits()) {
-      throw lossyConvertion(from, to, astNode->getMetadata());
+    bool convertedLiteral = false;
+    if (astNode->getNodeType() == AstNodeType::INTEGER_LITERAL) {
+      const IntegerLiteralNode &integerLiteral =
+          static_cast<const IntegerLiteralNode &>(*astNode);
+      size_t unsignedBits = integerToType.getBits() - integerToType.getSigned();
+      uint64_t maxValue = (1 << unsignedBits) - 1;
+      int64_t minValue = integerToType.getSigned() ? -maxValue - 1 : 0;
+      int64_t value = integerLiteral.getValue();
+      if (value >= minValue && static_cast<uint64_t>(value) <= maxValue) {
+        // Dirty, but we can just set the type on the metadata here which avoids
+        // excess copying.
+        astNode->getMetadata().valueType = cloneType(integerToType);
+        convertedLiteral = true;
+      }
     }
-    if (integerToType.getSigned() != integerFromType.getSigned()) {
-      throw convertionBetweenSigns(from, to, astNode->getMetadata());
+    if (!convertedLiteral) {
+      const IntegerType &integerFromType =
+          static_cast<const IntegerType &>(from);
+      if (integerToType.getBits() < integerFromType.getBits()) {
+        throw lossyConvertion(from, to, astNode->getMetadata());
+      }
+      if (integerToType.getSigned() != integerFromType.getSigned()) {
+        throw convertionBetweenSigns(from, to, astNode->getMetadata());
+      }
+      canCast = true;
     }
-    canCast = true;
   } else if (to.getTypeClass() == TypeClass::FLOAT &&
              from.getTypeClass() == TypeClass::FLOAT) {
     const FloatType &floatToType = static_cast<const FloatType &>(to);
@@ -336,9 +354,6 @@ void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
   if (lhs.getTypeClass() == TypeClass::INTEGER) {
     const auto &lhsInteger = static_cast<const IntegerType &>(lhs);
     const auto &rhsInteger = static_cast<const IntegerType &>(rhs);
-    if (lhsInteger.getSigned() != rhsInteger.getSigned()) {
-      throw convertionBetweenSigns(lhs, rhs, expressionMetadata);
-    }
     std::unique_ptr<Type> integerType = std::make_unique<IntegerType>(
         std::max(lhsInteger.getBits(), rhsInteger.getBits()),
         std::max(lhsInteger.getSigned(), rhsInteger.getSigned()));

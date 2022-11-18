@@ -77,7 +77,7 @@ int main(int argc, const char **argv) {
       std::unique_ptr<AstNode> ast;
       Parser parser(lexer, argv[0], &ast);
       parser.parse();
-      typeCheck(std::move(*ast));
+      ast = typeCheck(*ast);
       std::cout << astToString(*ast) << std::endl;
     } catch (const PyriteException &exception) {
       std::cerr << exception.getMessage() << std::endl;

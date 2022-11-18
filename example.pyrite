@@ -1,7 +1,7 @@
-u64 thing = 42;
+u8 thing = 2;
 i32 greet(enum(good|bad) mood) {
     123 + (456 - 3);
-    i32 thingy = thing;
+    any thingy = thing;
     void func() {
         42;
     }
