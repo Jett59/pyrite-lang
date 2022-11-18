@@ -48,7 +48,11 @@ public:
     return "'" + std::to_string(static_cast<char>(node.getValue())) + "'";
   }
   std::string visitReturnStatement(const ReturnStatementNode &node) override {
-    return "return " + visit(*node.getExpression()) + ";";
+    if (node.getExpression()) {
+      return "return " + visit(**node.getExpression()) + ";";
+    } else {
+      return "return;";
+    }
   }
   std::string visitBlockStatement(const BlockStatementNode &node) override {
     std::string result = "{\n";
@@ -232,7 +236,8 @@ public:
           cloneType(*parameter.type), true, parameterVariableMetadata);
       parameterVariables.push_back(std::make_unique<VariableDefinitionNode>(
           cloneType(*parameter.type), parameter.name,
-          std::unique_ptr<AstNode>(nullptr), false, std::move(parameterVariableMetadata)));
+          std::unique_ptr<AstNode>(nullptr), false,
+          std::move(parameterVariableMetadata)));
       symbolTable.back().insert({parameter.name, *parameterVariables.back()});
     }
     auto body = visit(*node.getBody());
@@ -275,8 +280,11 @@ public:
         setType(node.getMetadata(), std::make_unique<CharType>()));
   }
   ValueType visitReturnStatement(const ReturnStatementNode &node) override {
-    auto value = visit(*node.getExpression());
-    return std::make_unique<ReturnStatementNode>(std::move(value),
+    std::optional<ValueType> newValue = std::nullopt;
+    if (node.getExpression()) {
+      newValue = visit(**node.getExpression());
+    }
+    return std::make_unique<ReturnStatementNode>(std::move(newValue),
                                                  cloneMetadata(node));
   }
   ValueType visitBlockStatement(const BlockStatementNode &node) override {

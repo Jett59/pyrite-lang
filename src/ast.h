@@ -240,16 +240,19 @@ private:
 };
 class ReturnStatementNode : public AstNode {
 public:
-  ReturnStatementNode(std::unique_ptr<AstNode> expression, AstMetadata metadata)
+  ReturnStatementNode(std::optional<std::unique_ptr<AstNode>> expression,
+                      AstMetadata metadata)
       : AstNode(AstNodeType::RETURN_STATEMENT, std::move(metadata)),
         expression(std::move(expression)) {}
 
-  const std::unique_ptr<AstNode> &getExpression() const { return expression; }
+  const std::optional<std::unique_ptr<AstNode>> &getExpression() const {
+    return expression;
+  }
 
   void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
 
 private:
-  std::unique_ptr<AstNode> expression;
+  std::optional<std::unique_ptr<AstNode>> expression;
 };
 class BlockStatementNode : public AstNode {
 public:
@@ -635,7 +638,12 @@ public:
   }
 
   ValueType visitReturnStatement(const ReturnStatementNode &node) override {
-    return std::make_unique<ReturnStatementNode>(visit(*node.getExpression()),
+    bool hasExpression = node.getExpression().has_value();
+    std::optional<ValueType> newExpression = std::nullopt;
+    if (hasExpression) {
+      newExpression = visit(*node.getExpression().value());
+    }
+    return std::make_unique<ReturnStatementNode>(std::move(newExpression),
                                                  node.getMetadata().clone());
   }
 

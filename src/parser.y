@@ -136,6 +136,9 @@ definition
 | "return" expression ";" {
     $$ = std::make_unique<ReturnStatementNode>($2, createMetadata(@1));
 }
+| "return" ";" {
+    $$ = std::make_unique<ReturnStatementNode>(std::nullopt, createMetadata(@1));
+}
 
 block-statement: "{" statement-list "}" {
     $$ = std::make_unique<BlockStatementNode>($2, createMetadata(@1));
