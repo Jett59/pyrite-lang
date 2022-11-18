@@ -1,4 +1,4 @@
-u8 thing = 2;
+any(u64|bool) thingo = 123;
 i32 greet(enum(good|bad) mood) {
     123 + (456 - 3);
     any thingy = thing;

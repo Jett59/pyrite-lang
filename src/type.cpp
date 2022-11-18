@@ -259,14 +259,23 @@ static PyriteException lossyConvertion(const Type &from, const Type &to,
 static bool emitCast(const Type &from, const Type &to,
                      std::unique_ptr<AstNode> &astNode) {
   bool canCast = false;
-  if (to.getTypeClass() == TypeClass::ANY) {
+  bool typesEqual = false;
+  if (typeEquals(to, from)) {
+    canCast = true;
+    typesEqual = true;
+  } else if (to.getTypeClass() == TypeClass::ANY) {
     canCast = true;
   } else if (to.getTypeClass() == TypeClass::UNION) {
     const UnionType &unionToType = static_cast<const UnionType &>(to);
     for (const auto &option : unionToType.getOptions()) {
-      if (emitCast(from, *option, astNode)) {
-        canCast = true;
-        break;
+      try {
+        if (emitCast(from, *option, astNode)) {
+          canCast = true;
+          break;
+        }
+      } catch (const PyriteException &) {
+        // Do nothing. We just don't want to give these kinds of errors if we
+        // could find another match.
       }
     }
   } else if (to.getTypeClass() == TypeClass::INTEGER &&
@@ -307,7 +316,7 @@ static bool emitCast(const Type &from, const Type &to,
     }
     canCast = true;
   }
-  if (canCast) {
+  if (canCast && !typesEqual) {
     AstMetadata newMetadata = astNode->getMetadata().clone();
     newMetadata.valueType = cloneType(to);
     astNode = std::make_unique<CastNode>(std::move(astNode), cloneType(to),
