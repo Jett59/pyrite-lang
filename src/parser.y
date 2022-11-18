@@ -106,6 +106,8 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 /* For function call operator */
 %left "("
 
+%precedence UNARY_MINUS
+
 %%
 
 compilation-unit: definitions {
@@ -299,6 +301,15 @@ INTEGER_LITERAL {
 }
 | expression ">=" expression {
     $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::GREATER_THAN_OR_EQUAL, $1, $3, createMetadata(@1));
+}
+| expression "&&" expression {
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::LOGICAL_AND, $1, $3, createMetadata(@1));
+}
+| expression "||" expression {
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::LOGICAL_OR, $1, $3, createMetadata(@1));
+}
+| "-" expression %prec UNARY_MINUS {
+    $$ = std::make_unique<UnaryExpressionNode>(UnaryOperator::NEGATE, $2, createMetadata(@1));
 }
 
 expression-list: /* empty */ {

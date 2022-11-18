@@ -390,16 +390,18 @@ void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &valueAstNode,
                                   const Type &type,
                                   const UnaryExpressionNode &unaryExpression) {
   UnaryOperator op = unaryExpression.getOp();
-  removeReference(type, valueAstNode);
-  if (type.getTypeClass() == TypeClass::INTEGER) {
-    const auto &integer = static_cast<const IntegerType &>(type);
+  const Type *valueType = &type;
+  removeReference(*valueType, valueAstNode);
+  valueType = &**valueAstNode->getMetadata().valueType;
+  if (valueType->getTypeClass() == TypeClass::INTEGER) {
+    const auto &integer = static_cast<const IntegerType &>(*valueType);
     if (op == UnaryOperator::NEGATE && !integer.getSigned()) {
       throw PyriteException("Can't negate unsigned integer",
                             valueAstNode->getMetadata());
     }
-  } else if (type.getTypeClass() != TypeClass::FLOAT) {
+  } else if (valueType->getTypeClass() != TypeClass::FLOAT) {
     throw PyriteException("Invalid operand for unary operator: " +
-                              typeToString(type),
+                              typeToString(*valueType),
                           valueAstNode->getMetadata());
   }
 }

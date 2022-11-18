@@ -347,7 +347,9 @@ public:
     convertTypesForUnaryOperator(operand, **operand->getMetadata().valueType,
                                  node);
     return std::make_unique<UnaryExpressionNode>(
-        node.getOp(), std::move(operand), cloneMetadata(node));
+        node.getOp(), std::move(operand),
+        setType(node.getMetadata(),
+                cloneType(**operand->getMetadata().valueType)));
   }
   ValueType visitVariableReference(const VariableReferenceNode &node) override {
     const auto &name = node.getName();
