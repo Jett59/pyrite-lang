@@ -33,7 +33,7 @@ public:
     std::string result = visit(type.getReturnType()) + "(";
     if (type.getParameters().size() > 0) {
       for (const auto &param : type.getParameters()) {
-        result += visit(*param);
+        result += visit(*param) + ", ";
       }
       result = result.substr(0, result.size() - 2);
     }

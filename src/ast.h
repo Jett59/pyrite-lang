@@ -617,9 +617,14 @@ class AstTransformerVisitor : public AstVisitor {
 public:
   using ValueType = TemplatedValueType;
 
+  virtual ValueType visitAll(ValueType value) { return value; }
+  virtual ValueType visitAll(ValueType value, const AstNode &node) {
+    return visitAll(std::move(value));
+  }
+
   ValueType visit(const AstNode &node) {
     node.accept(*this);
-    return std::move(result);
+    return visitAll(std::move(result), node);
   }
 
   // I don't want to implement the same four lines of code for every single type

@@ -6,6 +6,15 @@
 namespace pyrite {
 class AstToStringTransformer : public AstTransformerVisitor<std::string> {
 public:
+  std::string visitAll(std::string value, const AstNode &node) override {
+    if (node.getMetadata().valueType) {
+      return "(" + value + ")" + "(" +
+             typeToString(**node.getMetadata().valueType) + ")";
+    } else {
+      return value;
+    }
+  }
+
   std::string visitCompilationUnit(const CompilationUnitNode &node) override {
     std::string result;
     for (auto &definition : node.getDefinitions()) {
@@ -518,9 +527,61 @@ std::unique_ptr<AstNode> typeCheck(const AstNode &ast) {
   return transformer.visit(ast);
 }
 
+template <typename TypeVisitor>
+requires(std::is_base_of_v<TypeToTypeTransformVisitor,
+                           TypeVisitor>) class AstTypeTransformer
+    : public PartialAstToAstTransformerVisitor {
+public:
+  AstTypeTransformer(TypeVisitor typeVisitor)
+      : typeVisitor(std::move(typeVisitor)) {}
+
+  std::unique_ptr<Type> visitType(const Type &type) override {
+    return typeVisitor.visit(type);
+  }
+
+  ValueType visitAll(ValueType value) override {
+    const auto &valueType = value->getMetadata().valueType;
+    if (valueType) {
+      value->getMetadata().valueType = visitType(**valueType);
+    }
+    return value;
+  }
+
+  ValueType
+  visitFunctionDefinition(const FunctionDefinitionNode &node) override {
+    std::vector<NameAndType> newParameters;
+    for (const auto &parameter : node.getParameters()) {
+      newParameters.push_back({parameter.name, visitType(*parameter.type)});
+    }
+    auto newReturnType = visitType(*node.getReturnType());
+    return std::make_unique<FunctionDefinitionNode>(
+        node.getName(), std::move(newParameters), std::move(newReturnType),
+        visit(*node.getBody()), node.getMetadata().clone());
+  }
+
+  ValueType
+  visitVariableDefinition(const VariableDefinitionNode &node) override {
+    auto newType = visitType(*node.getType());
+    return std::make_unique<VariableDefinitionNode>(
+        node.getName(), std::move(newType), visit(*node.getInitializer()),
+        node.getMetadata().clone());
+  }
+
+  ValueType visitCast(const CastNode &node) override {
+    auto newType = visitType(*node.getType());
+    return std::make_unique<CastNode>(visit(*node.getValue()),
+                                      std::move(newType),
+                                      node.getMetadata().clone());
+  }
+
+private:
+  TypeVisitor typeVisitor;
+};
+
 class TypeIdCollector : public PartialAstVisitor {
 public:
   void visit(const CastNode &node) override {
+    node.getValue()->accept(*this);
     const auto &type = *node.getType();
     if (type.getTypeClass() == TypeClass::ANY ||
         type.getTypeClass() == TypeClass::UNION) {
@@ -546,15 +607,6 @@ public:
   }
 };
 
-class AstSimplifier : public PartialAstToAstTransformerVisitor {
-public:
-  AstSimplifier(const TypeIdCollector &typeIdCollector)
-      : typeIdCollector(typeIdCollector) {}
-
-private:
-  const TypeIdCollector &typeIdCollector;
-};
-
 std::unique_ptr<AstNode> simplifyAst(const AstNode &ast) {
   TypeIdCollector typeIdCollector;
   ast.accept(typeIdCollector);
@@ -562,7 +614,6 @@ std::unique_ptr<AstNode> simplifyAst(const AstNode &ast) {
     std::cout << typeId.second << ": " << typeToString(*typeId.first)
               << std::endl;
   }
-  AstSimplifier simplifier{typeIdCollector};
-  return simplifier.visit(ast);
+  return PartialAstToAstTransformerVisitor{}.visit(ast);
 }
 } // namespace pyrite
