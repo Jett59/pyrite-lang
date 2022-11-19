@@ -45,6 +45,7 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
     metadata.line = location.begin.line;
     metadata.column = location.begin.column;
     metadata.parennedExpression = false;
+    metadata.alwaysReturns = false;
     return metadata;
 }
 

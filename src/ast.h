@@ -35,6 +35,7 @@ struct AstMetadata {
   size_t line, column;
   std::optional<std::unique_ptr<Type>> valueType;
   bool parennedExpression;
+  bool alwaysReturns;
 
   AstMetadata clone() const {
     AstMetadata metadata;
@@ -44,6 +45,7 @@ struct AstMetadata {
       metadata.valueType = cloneType(**valueType);
     }
     metadata.parennedExpression = parennedExpression;
+    metadata.alwaysReturns = alwaysReturns;
     return metadata;
   }
 };
@@ -264,6 +266,7 @@ public:
   const std::vector<std::unique_ptr<AstNode>> &getStatements() const {
     return statements;
   }
+  std::vector<std::unique_ptr<AstNode>> &getStatements() { return statements; }
 
   void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
 
