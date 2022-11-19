@@ -563,8 +563,8 @@ public:
   visitVariableDefinition(const VariableDefinitionNode &node) override {
     auto newType = visitType(*node.getType());
     return std::make_unique<VariableDefinitionNode>(
-        node.getName(), std::move(newType), visit(*node.getInitializer()),
-        node.getMetadata().clone());
+        std::move(newType), node.getName(), visit(*node.getInitializer()),
+        node.getMutable(), node.getMetadata().clone());
   }
 
   ValueType visitCast(const CastNode &node) override {
@@ -607,6 +607,23 @@ public:
   }
 };
 
+class AnyToUnionTypeTransformer : public PartialTypeToTypeTransformVisitor {
+public:
+  AnyToUnionTypeTransformer(const TypeIdCollector &typeIdCollector)
+      : typeIdCollector(typeIdCollector) {}
+
+  ValueType visitAny(const AnyType &) override {
+    std::vector<ValueType> options;
+    for (const auto &type : typeIdCollector.typeIds) {
+      options.push_back(cloneType(*type.first));
+    }
+    return std::make_unique<UnionType>(std::move(options));
+  }
+
+private:
+  const TypeIdCollector &typeIdCollector;
+};
+
 std::unique_ptr<AstNode> simplifyAst(const AstNode &ast) {
   TypeIdCollector typeIdCollector;
   ast.accept(typeIdCollector);
@@ -614,6 +631,8 @@ std::unique_ptr<AstNode> simplifyAst(const AstNode &ast) {
     std::cout << typeId.second << ": " << typeToString(*typeId.first)
               << std::endl;
   }
-  return PartialAstToAstTransformerVisitor{}.visit(ast);
+  AstTypeTransformer<AnyToUnionTypeTransformer> anyToUnionTransformer{
+      AnyToUnionTypeTransformer{typeIdCollector}};
+  return anyToUnionTransformer.visit(ast);
 }
 } // namespace pyrite
