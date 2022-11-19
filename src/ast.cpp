@@ -1,6 +1,7 @@
 #include "ast.h"
 #include "error.h"
 #include <string>
+#include <limits>
 
 namespace pyrite {
 class AstToStringTransformer : public AstTransformerVisitor<std::string> {
