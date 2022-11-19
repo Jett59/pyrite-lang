@@ -393,7 +393,9 @@ public:
     convertTypesForBinaryOperator(lhs, rhs, **lhs->getMetadata().valueType,
                                   **rhs->getMetadata().valueType,
                                   node.getMetadata());
-    auto valueType = cloneType(**lhs->getMetadata().valueType);
+    auto valueType = isComparisonOperator(node.getOp())
+                         ? std::make_unique<BooleanType>()
+                         : cloneType(**lhs->getMetadata().valueType);
     return std::make_unique<BinaryExpressionNode>(
         node.getOp(), std::move(lhs), std::move(rhs),
         modifyMetadata(node, std::move(valueType)));

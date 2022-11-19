@@ -377,6 +377,20 @@ static inline std::string binaryOperatorToString(BinaryOperator op) {
   return "";
 }
 
+static inline bool isComparisonOperator(BinaryOperator op) {
+  switch (op) {
+  case BinaryOperator::EQUAL:
+  case BinaryOperator::NOT_EQUAL:
+  case BinaryOperator::LESS_THAN:
+  case BinaryOperator::LESS_THAN_OR_EQUAL:
+  case BinaryOperator::GREATER_THAN:
+  case BinaryOperator::GREATER_THAN_OR_EQUAL:
+    return true;
+  default:
+    return false;
+  }
+}
+
 class BinaryExpressionNode : public AstNode {
 public:
   BinaryExpressionNode(BinaryOperator op, std::unique_ptr<AstNode> left,
