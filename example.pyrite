@@ -9,3 +9,17 @@ i64 sub(i32 a, i64 b) {
 bool equal(f64 a, f32 b) {
     return a == b;
 }
+
+any(i8|i32) thingo = 1234;
+
+any thing (any other) {
+    return other;
+}
+
+void fun() {
+    thing(123);
+    thing(thingo);
+    thing(true);
+    thing(false);
+    thing("Hello, World!");
+}

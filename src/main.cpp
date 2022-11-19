@@ -88,6 +88,7 @@ int main(int argc, const char **argv) {
         std:: cerr << errors.size() << " errors" << std::endl;
         return 1;
       }
+      ast = simplifyAst(*ast);
       std::cout << astToString(*ast) << std::endl;
     } catch (const PyriteError &exception) {
       std::cerr << "Error thrown:" << std::endl;

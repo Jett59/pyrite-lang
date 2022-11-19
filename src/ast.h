@@ -546,6 +546,72 @@ private:
   std::unique_ptr<Type> type;
 };
 
+class PartialAstVisitor : public AstVisitor {
+public:
+  void visit(const CompilationUnitNode &node) override {
+    for (const auto &definition : node.getDefinitions()) {
+      definition->accept(*this);
+    }
+  }
+  void visit(const VariableDefinitionNode &node) override {
+    node.getInitializer()->accept(*this);
+  }
+  void visit(const FunctionDefinitionNode &node) override {
+    node.getBody()->accept(*this);
+  }
+  void visit(const IntegerLiteralNode &node) override {}
+  void visit(const FloatLiteralNode &node) override {}
+  void visit(const StringLiteralNode &node) override {}
+  void visit(const BooleanLiteralNode &node) override {}
+  void visit(const CharLiteralNode &node) override {}
+  void visit(const ReturnStatementNode &node) override {
+    if (node.getExpression()) {
+      (*node.getExpression())->accept(*this);
+    }
+  }
+  void visit(const BlockStatementNode &node) override {
+    for (const auto &statement : node.getStatements()) {
+      statement->accept(*this);
+    }
+  }
+  void visit(const IfStatementNode &node) override {
+    node.getCondition()->accept(*this);
+    node.getThenStatement()->accept(*this);
+    if (node.getElseStatement()) {
+      node.getElseStatement()->accept(*this);
+    }
+  }
+  void visit(const WhileStatementNode &node) override {
+    node.getCondition()->accept(*this);
+    node.getBody()->accept(*this);
+  }
+  void visit(const BinaryExpressionNode &node) override {
+    node.getLeft()->accept(*this);
+    node.getRight()->accept(*this);
+  }
+  void visit(const UnaryExpressionNode &node) override {
+    node.getOperand()->accept(*this);
+  }
+  void visit(const VariableReferenceNode &node) override {}
+  void visit(const FunctionCallNode &node) override {
+    node.getFunction()->accept(*this);
+    for (const auto &argument : node.getArguments()) {
+      argument->accept(*this);
+    }
+  }
+  void visit(const AssignmentNode &node) override {
+    node.getLhs()->accept(*this);
+    node.getRhs()->accept(*this);
+  }
+  void visit(const DereferenceNode &node) override {
+    node.getValue()->accept(*this);
+  }
+  void visit(const CastNode &node) override { node.getValue()->accept(*this); }
+};
+static_assert(
+    !std::is_abstract_v<PartialAstVisitor>,
+    "PartialAstVisitor does not implement all of the required methods");
+
 template <typename TemplatedValueType>
 class AstTransformerVisitor : public AstVisitor {
 public:
@@ -737,6 +803,7 @@ std::string astToString(const AstNode &);
 // Assigns types to expressions, checks them against the expected types, and
 // performs implicit conversions.
 std::unique_ptr<AstNode> typeCheck(const AstNode &ast);
+std::unique_ptr<AstNode> simplifyAst(const AstNode &ast);
 } // namespace pyrite
 
 #endif

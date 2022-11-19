@@ -517,4 +517,52 @@ std::unique_ptr<AstNode> typeCheck(const AstNode &ast) {
   TypeCheckTransformer transformer;
   return transformer.visit(ast);
 }
+
+class TypeIdCollector : public PartialAstVisitor {
+public:
+  void visit(const CastNode &node) override {
+    const auto &type = *node.getType();
+    if (type.getTypeClass() == TypeClass::ANY ||
+        type.getTypeClass() == TypeClass::UNION) {
+      const auto &expressionType = **node.getValue()->getMetadata().valueType;
+      if (expressionType.getTypeClass() != TypeClass::ANY &&
+          expressionType.getTypeClass() != TypeClass::UNION) {
+        if (!typeHasId(expressionType)) {
+          typeIds.push_back({cloneType(expressionType), typeIds.size()});
+        }
+      }
+    }
+  }
+
+  std::vector<std::pair<std::unique_ptr<Type>, int64_t>> typeIds;
+
+  bool typeHasId(const Type &type) {
+    for (const auto &typeId : typeIds) {
+      if (typeEquals(*typeId.first, type)) {
+        return true;
+      }
+    }
+    return false;
+  }
+};
+
+class AstSimplifier : public PartialAstToAstTransformerVisitor {
+public:
+  AstSimplifier(const TypeIdCollector &typeIdCollector)
+      : typeIdCollector(typeIdCollector) {}
+
+private:
+  const TypeIdCollector &typeIdCollector;
+};
+
+std::unique_ptr<AstNode> simplifyAst(const AstNode &ast) {
+  TypeIdCollector typeIdCollector;
+  ast.accept(typeIdCollector);
+  for (const auto &typeId : typeIdCollector.typeIds) {
+    std::cout << typeId.second << ": " << typeToString(*typeId.first)
+              << std::endl;
+  }
+  AstSimplifier simplifier{typeIdCollector};
+  return simplifier.visit(ast);
+}
 } // namespace pyrite
