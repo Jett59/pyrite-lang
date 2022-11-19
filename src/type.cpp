@@ -261,6 +261,7 @@ static bool emitCast(const Type &from, const Type &to,
                      bool emitErrors = true) {
   bool canCast = false;
   bool typesEqual = false;
+  bool hasErrors = false;
   if (typeEquals(to, from)) {
     canCast = true;
     typesEqual = true;
@@ -296,11 +297,13 @@ static bool emitCast(const Type &from, const Type &to,
       const IntegerType &integerFromType =
           static_cast<const IntegerType &>(from);
       if (integerToType.getBits() < integerFromType.getBits()) {
+        hasErrors = true;
         if (emitErrors) {
           errors.push_back(lossyConvertion(from, to, astNode->getMetadata()));
         }
       }
       if (integerToType.getSigned() != integerFromType.getSigned()) {
+        hasErrors = true;
         if (emitErrors) {
           errors.push_back(
               convertionBetweenSigns(from, to, astNode->getMetadata()));
@@ -313,6 +316,7 @@ static bool emitCast(const Type &from, const Type &to,
     const FloatType &floatToType = static_cast<const FloatType &>(to);
     const FloatType &floatFromType = static_cast<const FloatType &>(from);
     if (floatToType.getBits() < floatFromType.getBits()) {
+      hasErrors = true;
       if (emitErrors) {
         errors.push_back(lossyConvertion(from, to, astNode->getMetadata()));
       }
@@ -326,12 +330,13 @@ static bool emitCast(const Type &from, const Type &to,
       astNode = std::make_unique<CastNode>(std::move(astNode), cloneType(to),
                                            std::move(newMetadata));
     } else {
+      hasErrors = true;
       if (emitErrors) {
         errors.push_back(typeMismatch(to, from, astNode->getMetadata()));
       }
     }
   }
-  return canCast || typesEqual;
+  return !hasErrors;
 }
 
 void removeReference(const Type &type, std::unique_ptr<AstNode> &astNode) {

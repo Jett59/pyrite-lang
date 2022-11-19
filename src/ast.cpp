@@ -256,9 +256,11 @@ public:
     return std::move(result);
   }
   ValueType visitIntegerLiteral(const IntegerLiteralNode &node) override {
+    bool needsI64 = node.getValue() > std::numeric_limits<int32_t>::max();
     return std::make_unique<IntegerLiteralNode>(
         node.getValue(),
-        setType(node.getMetadata(), std::make_unique<IntegerType>(32, true)));
+        setType(node.getMetadata(),
+                std::make_unique<IntegerType>(needsI64 ? 64 : 32, true)));
   }
   ValueType visitFloatLiteral(const FloatLiteralNode &node) override {
     return std::make_unique<FloatLiteralNode>(

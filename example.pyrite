@@ -1,4 +1,4 @@
-any thingy = 73;
+any(i8|i32) thingy = 1234567890;
 i64 add(i32 a, i64 b) {
     return a + b;
 }
