@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -181,6 +182,15 @@ public:
 
   void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 
+  std::optional<const Type *> getMemberType(const std::string &name) const {
+    for (const auto &[name, type] : fields) {
+      if (name == name) {
+        return type.get();
+      }
+    }
+    return std::nullopt;
+  }
+
 private:
   std::vector<NameAndType> fields;
 };
@@ -351,6 +361,8 @@ bool typeEquals(const Type &a, const Type &b);
 class AstNode;
 class AstMetadata;
 class UnaryExpressionNode;
+
+void removeReference(const Type &type, std::unique_ptr<AstNode> &astNode);
 
 void convertTypesForAssignment(std::unique_ptr<AstNode> &rhsAstNode,
                                const Type &lhs, const Type &rhs);

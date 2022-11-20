@@ -148,6 +148,38 @@ public:
     return possiblyAddParens(visit(*node.getValue()), node.getMetadata()) +
            " as " + typeToString(*node.getType());
   }
+  std::string visitArrayLiteral(const ArrayLiteralNode &node) override {
+    std::string result = "[";
+    if (node.getValues().size() > 0) {
+      for (const auto &value : node.getValues()) {
+        result += visit(*value) + ", ";
+      }
+      result = result.substr(0, result.size() - 2);
+    }
+    result += "]";
+    return result;
+  }
+  std::string visitStructLiteral(const StructLiteralNode &node) override {
+    std::string result = "{";
+    if (node.getValues().size() > 0) {
+      for (const auto &value : node.getValues()) {
+        result += value.first + " = " + visit(*value.second) + ", ";
+      }
+      result = result.substr(0, result.size() - 3);
+    }
+    result += "}";
+    return result;
+  }
+  std::string visitArrayIndex(const ArrayIndexNode &node) override {
+    return possiblyAddParens(visit(*node.getArray()),
+                             node.getArray()->getMetadata()) +
+           "[" + visit(*node.getIndex()) + "]";
+  }
+  std::string visitStructMember(const StructMemberNode &node) override {
+    return possiblyAddParens(visit(*node.getStructValue()),
+                             node.getStructValue()->getMetadata()) +
+           "." + node.getMember();
+  }
 
 private:
   size_t indent = 0;
@@ -516,6 +548,94 @@ public:
     return std::make_unique<CastNode>(std::move(newValue), std::move(newType),
                                       modifyMetadata(node, std::move(newType)));
   }
+  ValueType visitArrayLiteral(const ArrayLiteralNode &node) override {
+    std::vector<std::unique_ptr<AstNode>> newValues;
+    for (auto &value : node.getValues()) {
+      newValues.push_back(visit(*value));
+    }
+    // Just say that we have an array of auto. The type converter will pick up
+    // that we are an array literal and fix it.
+    return std::make_unique<ArrayLiteralNode>(
+        std::move(newValues),
+        modifyMetadata(
+            node, std::make_unique<ArrayType>(std::make_unique<AutoType>())));
+  }
+  ValueType visitStructLiteral(const StructLiteralNode &node) override {
+    std::map<std::string, ValueType> newValues;
+    for (auto &[name, value] : node.getValues()) {
+      newValues[name] = visit(*value);
+    }
+    // Create a dummy struct type with what we have right now. The type
+    // converter will pick up that we are a struct literal and fix it.
+    std::vector<NameAndType> fields;
+    for (auto &[name, value] : newValues) {
+      fields.push_back({name, cloneType(**value->getMetadata().valueType)});
+    }
+    return std::make_unique<StructLiteralNode>(
+        std::move(newValues),
+        modifyMetadata(node, std::make_unique<StructType>(std::move(fields),
+                                                          "<Unknown>")));
+  }
+  ValueType visitArrayIndex(const ArrayIndexNode &node) override {
+    auto newArray = visit(*node.getArray());
+    auto newIndex = visit(*node.getIndex());
+    removeReference(**newArray->getMetadata().valueType, newArray);
+    const auto &arrayValueType = **newArray->getMetadata().valueType;
+    if (arrayValueType.getTypeClass() != TypeClass::ARRAY) {
+      errors.push_back(PyriteError("Cannot index a non-array of type " +
+                                       typeToString(arrayValueType),
+                                   node.getMetadata()));
+      return std::make_unique<ArrayIndexNode>(
+          std::move(newArray), std::move(newIndex),
+          modifyMetadata(node, cloneType(arrayValueType)));
+    }
+    const auto &arrayType = static_cast<const ArrayType &>(arrayValueType);
+    convertTypesForAssignment(newIndex, IntegerType{64, false},
+                              **newIndex->getMetadata().valueType);
+    auto newValueType = cloneType(arrayType.getElementType());
+    return std::make_unique<ArrayIndexNode>(
+        std::move(newArray), std::move(newIndex),
+        modifyMetadata(node, std::move(newValueType)));
+  }
+  ValueType visitStructMember(const StructMemberNode &node) override {
+    auto newStruct = visit(*node.getStructValue());
+    const auto &structValueType = **newStruct->getMetadata().valueType;
+    if (structValueType.getTypeClass() != TypeClass::REFERENCE) {
+      errors.push_back(
+          PyriteError("Cannot access a non-struct reference of type " +
+                          typeToString(structValueType),
+                      node.getMetadata()));
+      return std::make_unique<StructMemberNode>(
+          std::move(newStruct), node.getMember(),
+          modifyMetadata(node, std::make_unique<VoidType>()));
+    }
+    const auto &structReferenceType =
+        static_cast<const ReferenceType &>(structValueType);
+    const auto &structReferencedType = structReferenceType.getReferencedType();
+    if (structReferencedType.getTypeClass() != TypeClass::STRUCT) {
+      errors.push_back(PyriteError("Cannot access a non-struct of type " +
+                                       typeToString(structReferencedType),
+                                   node.getMetadata()));
+      return std::make_unique<StructMemberNode>(
+          std::move(newStruct), node.getMember(),
+          modifyMetadata(node, std::make_unique<VoidType>()));
+    }
+    const auto &structType =
+        static_cast<const StructType &>(structReferencedType);
+    auto memberType = structType.getMemberType(node.getMember());
+    if (!memberType) {
+      errors.push_back(PyriteError("Struct " + structType.getName() +
+                                       " does not have a member named " +
+                                       node.getMember(),
+                                   node.getMetadata()));
+      return std::make_unique<StructMemberNode>(
+          std::move(newStruct), node.getMember(),
+          modifyMetadata(node, std::make_unique<VoidType>()));
+    }
+    return std::make_unique<StructMemberNode>(
+        std::move(newStruct), node.getMember(),
+        modifyMetadata(node, cloneType(**memberType)));
+  }
 
 private:
   std::vector<std::map<std::string, const AstNode &>> symbolTable;
@@ -627,10 +747,6 @@ private:
 std::unique_ptr<AstNode> simplifyAst(const AstNode &ast) {
   TypeIdCollector typeIdCollector;
   ast.accept(typeIdCollector);
-  for (const auto &typeId : typeIdCollector.typeIds) {
-    std::cout << typeId.second << ": " << typeToString(*typeId.first)
-              << std::endl;
-  }
   AstTypeTransformer<AnyToUnionTypeTransformer> anyToUnionTransformer{
       AnyToUnionTypeTransformer{typeIdCollector}};
   return anyToUnionTransformer.visit(ast);
