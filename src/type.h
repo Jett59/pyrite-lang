@@ -20,6 +20,7 @@ enum class TypeClass {
   FUNCTION,
   STRUCT,
   UNION,
+  RAW_UNION,
   ENUM,
   IDENTIFIED,
   ANY,
@@ -38,6 +39,7 @@ class ReferenceType;
 class FunctionType;
 class StructType;
 class UnionType;
+class RawUnionType;
 class EnumType;
 class IdentifiedType;
 class AnyType;
@@ -56,6 +58,7 @@ public:
   virtual void visit(const FunctionType &) = 0;
   virtual void visit(const StructType &) = 0;
   virtual void visit(const UnionType &) = 0;
+  virtual void visit(const RawUnionType &) = 0;
   virtual void visit(const EnumType &) = 0;
   virtual void visit(const IdentifiedType &) = 0;
   virtual void visit(const AnyType &) = 0;
@@ -208,6 +211,25 @@ public:
 private:
   std::vector<std::unique_ptr<Type>> options;
 };
+/**
+ * @brief a raw union type
+ *
+ * Dispite the name, UnionType is not like the C union type; it is more like
+ * std::variant. RawUnionType is the equivalent of a C union and is only used to
+ * simplify the UnionType for code generation.
+ */
+class RawUnionType : public Type {
+public:
+  RawUnionType(std::vector<std::unique_ptr<Type>> options)
+      : Type(TypeClass::RAW_UNION), options(std::move(options)) {}
+
+  const auto &getOptions() const { return options; }
+
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
+
+private:
+  std::vector<std::unique_ptr<Type>> options;
+};
 class EnumType : public Type {
 public:
   EnumType(std::vector<std::string> options)
@@ -274,6 +296,10 @@ public:
   void visit(const StructType &type) override { result = visitStruct(type); }
   virtual ValueType visitUnion(const UnionType &type) = 0;
   void visit(const UnionType &type) override { result = visitUnion(type); }
+  virtual ValueType visitRawUnion(const RawUnionType &type) = 0;
+  void visit(const RawUnionType &type) override {
+    result = visitRawUnion(type);
+  }
   virtual ValueType visitEnum(const EnumType &type) = 0;
   void visit(const EnumType &type) override { result = visitEnum(type); }
   virtual ValueType visitIdentified(const IdentifiedType &type) = 0;
@@ -336,6 +362,13 @@ public:
       options.push_back(visit(*option));
     }
     return std::make_unique<UnionType>(std::move(options));
+  }
+  ValueType visitRawUnion(const RawUnionType &type) override {
+    std::vector<std::unique_ptr<Type>> options;
+    for (const auto &option : type.getOptions()) {
+      options.push_back(visit(*option));
+    }
+    return std::make_unique<RawUnionType>(std::move(options));
   }
   ValueType visitEnum(const EnumType &type) override {
     return std::make_unique<EnumType>(type.getOptions());

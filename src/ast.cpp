@@ -4,6 +4,11 @@
 #include <string>
 
 namespace pyrite {
+std::unique_ptr<AstNode> cloneAst(const AstNode &ast) {
+  PartialAstToAstTransformerVisitor visitor;
+  return visitor.visit(ast);
+}
+
 class AstToStringTransformer : public AstTransformerVisitor<std::string> {
 public:
   std::string visitAll(std::string value, const AstNode &node) override {
@@ -744,11 +749,95 @@ private:
   const TypeIdCollector &typeIdCollector;
 };
 
+static const std::string UNION_DISCRIMINATOR_FIELD = "type";
+static const std::string UNION_VALUE_FIELD = "value";
+
+class UnionToStructTransformer : public PartialAstToAstTransformerVisitor {
+  static std::unique_ptr<Type> getDescriminatorType() {
+    return std::make_unique<IntegerType>(32, false);
+  }
+  static std::unique_ptr<Type> getRawUnionType(const UnionType &unionType) {
+    std::vector<std::unique_ptr<Type>> options;
+    for (const auto &option : unionType.getOptions()) {
+      options.push_back(cloneType(*option));
+    }
+    return std::make_unique<RawUnionType>(std::move(options));
+  }
+
+  class UnionToStructTypeTransformer
+      : public PartialTypeToTypeTransformVisitor {
+  public:
+    ValueType visitUnion(const UnionType &type) override {
+      std::vector<ValueType> newOptions;
+      for (const auto &option : type.getOptions()) {
+        newOptions.push_back(visit(*option));
+      }
+      auto descriminatorType = getDescriminatorType();
+      std::unique_ptr<Type> rawUnionType =
+          std::make_unique<RawUnionType>(std::move(newOptions));
+      std::string unionTypeName = typeToString(*rawUnionType);
+      std::vector<NameAndType> memberTypes;
+      memberTypes.emplace_back(UNION_DISCRIMINATOR_FIELD,
+                               std::move(descriminatorType));
+      memberTypes.emplace_back(UNION_VALUE_FIELD, std::move(rawUnionType));
+      return std::make_unique<StructType>(std::move(memberTypes),
+                                          unionTypeName);
+    }
+  };
+
+public:
+  UnionToStructTransformer(const TypeIdCollector &typeIdCollector)
+      : typeIdCollector(typeIdCollector) {}
+
+  ValueType visit(const AstNode &ast) {
+    auto result = PartialAstToAstTransformerVisitor::visit(ast);
+    AstTypeTransformer typeTransformer{UnionToStructTypeTransformer{}};
+    result = typeTransformer.visit(*result);
+    return result;
+  }
+
+  ValueType visitCast(const CastNode &node) override {
+    if (node.getType()->getTypeClass() == TypeClass::UNION) {
+      const auto &unionType = static_cast<const UnionType &>(*node.getType());
+      const auto &expressionType = **node.getValue()->getMetadata().valueType;
+      if (expressionType.getTypeClass() != TypeClass::UNION) {
+        std::optional<ValueType> descriminator = std::nullopt;
+        ValueType value = cloneAst(*node.getValue());
+        for (int64_t i = 0; i < typeIdCollector.typeIds.size(); i++) {
+          if (typeEquals(*typeIdCollector.typeIds[i].first, expressionType)) {
+            AstMetadata descriminatorMetadata = node.getMetadata().clone();
+            descriminatorMetadata.valueType = getDescriminatorType();
+            descriminator = std::make_unique<IntegerLiteralNode>(
+                i, std::move(descriminatorMetadata));
+            break;
+          }
+        }
+        AstMetadata castMetadata = value->getMetadata().clone();
+        value = std::make_unique<CastNode>(std::move(value),
+                                           getRawUnionType(unionType),
+                                           std::move(castMetadata));
+        std::map<std::string, ValueType> fields;
+        fields.emplace(UNION_DISCRIMINATOR_FIELD, std::move(*descriminator));
+        fields.emplace(UNION_VALUE_FIELD, std::move(value));
+        return std::make_unique<StructLiteralNode>(std::move(fields),
+                                                   node.getMetadata().clone());
+      }
+    }
+    return cloneAst(node);
+  }
+
+private:
+  const TypeIdCollector &typeIdCollector;
+};
+
 std::unique_ptr<AstNode> simplifyAst(const AstNode &ast) {
   TypeIdCollector typeIdCollector;
   ast.accept(typeIdCollector);
   AstTypeTransformer<AnyToUnionTypeTransformer> anyToUnionTransformer{
       AnyToUnionTypeTransformer{typeIdCollector}};
-  return anyToUnionTransformer.visit(ast);
+  UnionToStructTransformer unionToStructTransformer{typeIdCollector};
+  auto result = anyToUnionTransformer.visit(ast);
+  result = unionToStructTransformer.visit(*result);
+  return result;
 }
 } // namespace pyrite

@@ -3,6 +3,7 @@
 
 #include "type.h"
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -905,6 +906,8 @@ public:
 static_assert(!std::is_abstract_v<PartialAstToAstTransformerVisitor>,
               "PartialAstToAstTransformVisitor does not implement all the "
               "required methods from AstTransformVisitor");
+
+std::unique_ptr<AstNode> cloneAst(const AstNode &node);
 
 std::string astToString(const AstNode &);
 

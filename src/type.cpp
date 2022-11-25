@@ -62,6 +62,17 @@ public:
     result += ")";
     return result;
   }
+  std::string visitRawUnion(const RawUnionType &type) override {
+    std::string result = "union(";
+    if (type.getOptions().size() > 0) {
+      for (const auto &option : type.getOptions()) {
+        result += visit(*option) + "|";
+      }
+      result = result.substr(0, result.size() - 1);
+    }
+    result += ")";
+    return result;
+  }
   std::string visitEnum(const EnumType &type) override {
     std::string result = "enum(";
     if (type.getOptions().size() > 0) {
@@ -178,6 +189,24 @@ public:
       return false;
     } else {
       const UnionType &otherUnion = static_cast<const UnionType &>(other);
+      if (type.getOptions().size() != otherUnion.getOptions().size()) {
+        return false;
+      } else {
+        for (size_t i = 0; i < otherUnion.getOptions().size(); i++) {
+          if (!TypesEqualTransformer{*otherUnion.getOptions()[i]}.visit(
+                  *type.getOptions()[i])) {
+            return false;
+          }
+        }
+        return true;
+      }
+    }
+  }
+  bool visitRawUnion(const RawUnionType &type) override {
+    if (other.getTypeClass() != TypeClass::RAW_UNION) {
+      return false;
+    } else {
+      const auto &otherUnion = static_cast<const RawUnionType &>(other);
       if (type.getOptions().size() != otherUnion.getOptions().size()) {
         return false;
       } else {
