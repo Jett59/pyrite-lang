@@ -146,6 +146,9 @@ stringLiteralTokenRule(Lexer &lexer, location &location) {
 
 static TokenRule tokenRules[] = {
     basicTokenRule(Parser::make_RETURN, "return"),
+    basicTokenRule(Parser::make_IF, "if"),
+    basicTokenRule(Parser::make_ELSE, "else"),
+    basicTokenRule(Parser::make_WHILE, "while"),
     basicTokenRule(Parser::make_I8, "i8"),
     basicTokenRule(Parser::make_I16, "i16"),
     basicTokenRule(Parser::make_I32, "i32"),

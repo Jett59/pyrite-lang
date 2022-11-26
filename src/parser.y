@@ -68,6 +68,7 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %token TRUE "true" FALSE "false"
 
 %token RETURN "return"
+%token IF "if" ELSE "else" WHILE "while"
 
 %token I8 "i8" I16 "i16" I32 "i32" I64 "i64" U8 "u8" U16 "u16" U32 "u32" U64 "u64" F32 "f32" F64 "f64" BOOL "bool" CHAR "char" VOID "void"
 %token AUTO "auto" ANY "any"
@@ -89,7 +90,7 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 
 %type <std::vector<std::string>> piped-identifier-list
 
-%type <std::unique_ptr<AstNode>> definition expression statement block-statement
+%type <std::unique_ptr<AstNode>> definition expression statement block-statement if-statement
 %type <std::vector<std::unique_ptr<AstNode>>> definitions statement-list expression-list
 
 %type <std::unique_ptr<Type>> type
@@ -146,6 +147,20 @@ definition
 }
 | "return" ";" {
     $$ = std::make_unique<ReturnStatementNode>(std::nullopt, createMetadata(@1));
+}
+| if-statement
+| "while" expression block-statement {
+    $$ = std::make_unique<WhileStatementNode>($2, $3, createMetadata(@1));
+}
+
+if-statement: "if" expression block-statement {
+    $$ = std::make_unique<IfStatementNode>($2, $3, nullptr, createMetadata(@1));
+}
+if-statement: "if" expression block-statement "else" block-statement {
+    $$ = std::make_unique<IfStatementNode>($2, $3, $5, createMetadata(@1));
+}
+| "if" expression block-statement "else" if-statement {
+    $$ = std::make_unique<IfStatementNode>($2, $3, $5, createMetadata(@1));
 }
 
 block-statement: "{" statement-list "}" {

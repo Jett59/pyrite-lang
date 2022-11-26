@@ -23,3 +23,11 @@ void fun() {
     thing(false);
     thing("Hello, World!");
 }
+
+bool isEven(i32 x) {
+    if x % 2 == 0 {
+        return true;
+    }else {
+        return false;
+    }
+}
