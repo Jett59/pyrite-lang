@@ -833,7 +833,8 @@ public:
   ValueType visitIfStatement(const IfStatementNode &node) override {
     return std::make_unique<IfStatementNode>(
         visit(*node.getCondition()), visit(*node.getThenStatement()),
-        visit(*node.getElseStatement()), node.getMetadata().clone());
+        node.getElseStatement() ? visit(*node.getElseStatement()) : nullptr,
+        node.getMetadata().clone());
   }
   ValueType visitWhileStatement(const WhileStatementNode &node) override {
     return std::make_unique<WhileStatementNode>(visit(*node.getCondition()),

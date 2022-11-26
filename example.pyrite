@@ -25,6 +25,9 @@ void fun() {
 }
 
 bool isEven(i32 x) {
+    if x == 0 {
+        return true;
+    }
     if x % 2 == 0 {
         return true;
     }else {

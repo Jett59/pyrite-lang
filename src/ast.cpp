@@ -412,12 +412,12 @@ public:
   ValueType visitIfStatement(const IfStatementNode &node) override {
     auto condition = visit(*node.getCondition());
     auto thenStatement = visit(*node.getThenStatement());
-    bool alwaysReturns = thenStatement->getMetadata().alwaysReturns;
+    bool alwaysReturns = false;
     std::unique_ptr<AstNode> elseStatement;
     if (node.getElseStatement()) {
       elseStatement = visit(*node.getElseStatement());
-      alwaysReturns =
-          alwaysReturns && elseStatement->getMetadata().alwaysReturns;
+      alwaysReturns = thenStatement->getMetadata().alwaysReturns &&
+                      elseStatement->getMetadata().alwaysReturns;
     }
     return std::make_unique<IfStatementNode>(
         std::move(condition), std::move(thenStatement),
