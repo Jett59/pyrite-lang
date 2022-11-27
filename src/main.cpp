@@ -1,3 +1,4 @@
+#include "codegen.h"
 #include "error.h"
 #include "lexer.h"
 #include "parser.hh"
@@ -16,6 +17,10 @@ struct Options {
   bool help = false;
   bool version = false;
   bool usage = false;
+  std::string target;
+  std::string outputFile;
+  CodeFileType outputFileType = CodeFileType::OBJECT;
+  OptimizationLevel optimizationLevel = OptimizationLevel::O2;
 
   Options(int argc, const char **argv) {
     if (argc == 1) {
@@ -27,6 +32,32 @@ struct Options {
           help = true;
         } else if (arg == "-v" || arg == "--version") {
           version = true;
+        } else if (arg == "-o" || arg == "--output") {
+          if (++i < argc) {
+            outputFile = argv[i];
+          }
+        } else if (arg == "-t" || arg == "--target") {
+          if (++i < argc) {
+            target = argv[i];
+          }
+        } else if (arg == "-c" || arg == "--compile") {
+          outputFileType = CodeFileType::OBJECT;
+        } else if (arg == "-S" || arg == "--assembly") {
+          outputFileType = CodeFileType::ASSEMBLY;
+        } else if (arg == "--emit-llvm") {
+          if (outputFileType == CodeFileType::OBJECT) {
+            outputFileType = CodeFileType::LLVM_BITCODE;
+          } else if (outputFileType == CodeFileType::ASSEMBLY) {
+            outputFileType = CodeFileType::LLVM_ASSEMBLY;
+          }
+        } else if (arg == "-O0") {
+          optimizationLevel = OptimizationLevel::NONE;
+        } else if (arg == "-O1") {
+          optimizationLevel = OptimizationLevel::O1;
+        } else if (arg == "-O2") {
+          optimizationLevel = OptimizationLevel::O2;
+        } else if (arg == "-O3") {
+          optimizationLevel = OptimizationLevel::O3;
         } else if (arg[0] != '-') {
           fileName = arg;
         } else {
@@ -50,6 +81,15 @@ static void help(std::string programFile) {
   std::cerr << "Options:" << std::endl;
   std::cerr << "  -h, --help\t\tPrint this help message" << std::endl;
   std::cerr << "  -v, --version\t\tPrint version information" << std::endl;
+  std::cerr << "  -o, --output\t\tSpecify output file" << std::endl;
+  std::cerr << "  -t, --target\t\tSpecify target triple" << std::endl;
+  std::cerr << "  -c, --compile\t\tCompile to object file" << std::endl;
+  std::cerr << "  -S, --assembly\tOutput to assembly code" << std::endl;
+  std::cerr << "  --emit-llvm\t\tOutput LLVM IR" << std::endl;
+  std::cerr << "  -O0\t\t\tDisable optimizations" << std::endl;
+  std::cerr << "  -O1\t\t\tEnable simple optimizations" << std::endl;
+  std::cerr << "  -O2\t\t\tEnable default optimizations" << std::endl;
+  std::cerr << "  -O3\t\t\tEnable aggressive optimizations" << std::endl;
 }
 #define MAJOR_VERSION "0"
 #define MINOR_VERSION "1"
@@ -85,11 +125,30 @@ int main(int argc, const char **argv) {
         for (const auto &error : errors) {
           std::cerr << error.getMessage() << std::endl;
         }
-        std:: cerr << errors.size() << " errors" << std::endl;
+        std::cerr << errors.size() << " errors" << std::endl;
         return 1;
       }
       ast = simplifyAst(*ast);
-      std::cout << astToString(*ast) << std::endl;
+      // Provide default output file type if none was specified
+      if (options.outputFile.empty()) {
+        if (options.fileName.ends_with(".pyrite")) {
+          options.outputFile =
+              options.fileName.substr(0, options.fileName.size() - 7);
+        } else {
+          options.outputFile = options.fileName;
+        }
+        if (options.outputFileType == CodeFileType::OBJECT) {
+          options.outputFile += ".o";
+        } else if (options.outputFileType == CodeFileType::ASSEMBLY) {
+          options.outputFile += ".s";
+        } else if (options.outputFileType == CodeFileType::LLVM_BITCODE) {
+          options.outputFile += ".bc";
+        } else if (options.outputFileType == CodeFileType::LLVM_ASSEMBLY) {
+          options.outputFile += ".ll";
+        }
+      }
+      codegen(*ast, options.target, options.outputFile, options.outputFileType,
+              options.optimizationLevel);
     } catch (const PyriteError &exception) {
       std::cerr << "Error thrown:" << std::endl;
       std::cerr << exception.getMessage() << std::endl;
