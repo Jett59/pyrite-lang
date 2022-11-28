@@ -144,12 +144,11 @@ public:
     globalConstructorIrBuilder.CreateRetVoid();
     // Use the @llvm.global_ctors global variable to run the global constructor
     // function.
-    llvm::StructType *globalConstructorType =
-        llvm::StructType::get(context, {llvm::Type::getInt32Ty(context),
-                                        llvm::Type::getInt8PtrTy(context),
-                                        llvm::Type::getInt8PtrTy(context)});
-    Constant *globalConstructorFunctionConstant = ConstantExpr::getBitCast(
-        globalConstructorFunction, llvm::Type::getInt8PtrTy(context));
+    llvm::StructType *globalConstructorType = llvm::StructType::get(
+        context, {llvm::Type::getInt32Ty(context),
+                  globalConstructorFunction->getType(),
+                  llvm::Type::getInt8PtrTy(context)});
+    Constant *globalConstructorFunctionConstant = globalConstructorFunction;
     Constant *globalConstructorPriorityConstant =
         ConstantInt::get(llvm::Type::getInt32Ty(context), 65535);
     Constant *globalConstructor = ConstantStruct::get(
