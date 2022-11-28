@@ -108,6 +108,13 @@ private:
   size_t bits;
   bool isSigned;
 };
+static inline bool isSigned(const Type &type) {
+  if (type.getTypeClass() == TypeClass::INTEGER) {
+    return static_cast<const IntegerType &>(type).getSigned();
+  }
+  return false;
+}
+
 class FloatType : public Type {
 public:
   FloatType(size_t bits) : Type(TypeClass::FLOAT), bits(bits) {}
@@ -396,6 +403,13 @@ class AstMetadata;
 class UnaryExpressionNode;
 
 void removeReference(const Type &type, std::unique_ptr<AstNode> &astNode);
+static inline const Type &removeReference(const Type &type) {
+  if (type.getTypeClass() == TypeClass::REFERENCE) {
+    return static_cast<const ReferenceType &>(type).getReferencedType();
+  } else {
+    return type;
+  }
+}
 
 void convertTypesForAssignment(std::unique_ptr<AstNode> &rhsAstNode,
                                const Type &lhs, const Type &rhs);

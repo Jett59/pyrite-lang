@@ -1,36 +1,3 @@
-[i8] str = "Hello, World!";
-i64 add(i32 a, i64 b) {
+any add(i32 a, i32 b) {
     return a + b;
-}
-i64 sub(i32 a, i64 b) {
-    return add(a, -b);
-}
-
-bool equal(f64 a, f32 b) {
-    return a == b;
-}
-
-any(i8|i32) thingo = 1234;
-
-any thing (any other) {
-    return other;
-}
-
-void fun() {
-    thing(123);
-    thing(thingo);
-    thing(true);
-    thing(false);
-    thing("Hello, World!");
-}
-
-bool isEven(i32 x) {
-    if x == 0 {
-        return true;
-    }
-    if x % 2 == 0 {
-        return true;
-    }else {
-        return false;
-    }
 }

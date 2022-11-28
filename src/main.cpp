@@ -153,6 +153,10 @@ int main(int argc, const char **argv) {
       std::cerr << "Error thrown:" << std::endl;
       std::cerr << exception.getMessage() << std::endl;
       return 1;
+    }catch (const std::exception &e) {
+      std::cerr << "Error thrown:" << std::endl;
+      std::cerr << e.what() << std::endl;
+      return 1;
     }
   }
   return 0;

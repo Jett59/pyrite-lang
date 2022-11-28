@@ -28,21 +28,23 @@ static llvm::OptimizationLevel getLevel(pyrite::OptimizationLevel level) {
 }
 
 void optimize(Module &module, OptimizationLevel optimizationLevel) {
-  ModuleAnalysisManager moduleAnalyzer;
-  PassBuilder passBuilder;
-  FunctionAnalysisManager functionAnalyzer;
-  CGSCCAnalysisManager cgsccAnalyzer;
-  LoopAnalysisManager loopAnalyzer;
-  moduleAnalyzer.registerPass(
-      [&] { return FunctionAnalysisManagerModuleProxy(functionAnalyzer); });
-  passBuilder.registerModuleAnalyses(moduleAnalyzer);
-  passBuilder.registerCGSCCAnalyses(cgsccAnalyzer);
-  passBuilder.registerFunctionAnalyses(functionAnalyzer);
-  passBuilder.registerLoopAnalyses(loopAnalyzer);
-  passBuilder.crossRegisterProxies(loopAnalyzer, functionAnalyzer,
-                                   cgsccAnalyzer, moduleAnalyzer);
-  ModulePassManager passManager =
-      passBuilder.buildPerModuleDefaultPipeline(getLevel(optimizationLevel));
-  passManager.run(module, moduleAnalyzer);
+  if (optimizationLevel != OptimizationLevel::NONE) {
+    ModuleAnalysisManager moduleAnalyzer;
+    PassBuilder passBuilder;
+    FunctionAnalysisManager functionAnalyzer;
+    CGSCCAnalysisManager cgsccAnalyzer;
+    LoopAnalysisManager loopAnalyzer;
+    moduleAnalyzer.registerPass(
+        [&] { return FunctionAnalysisManagerModuleProxy(functionAnalyzer); });
+    passBuilder.registerModuleAnalyses(moduleAnalyzer);
+    passBuilder.registerCGSCCAnalyses(cgsccAnalyzer);
+    passBuilder.registerFunctionAnalyses(functionAnalyzer);
+    passBuilder.registerLoopAnalyses(loopAnalyzer);
+    passBuilder.crossRegisterProxies(loopAnalyzer, functionAnalyzer,
+                                     cgsccAnalyzer, moduleAnalyzer);
+    ModulePassManager passManager =
+        passBuilder.buildPerModuleDefaultPipeline(getLevel(optimizationLevel));
+    passManager.run(module, moduleAnalyzer);
+  }
 }
 } // namespace pyrite

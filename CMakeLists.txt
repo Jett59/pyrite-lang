@@ -31,6 +31,8 @@ add_executable(pyrite
     "${CMAKE_CURRENT_BINARY_DIR}/parser.cc"
     src/type.cpp
     src/ast.cpp
+    src/codegen.cpp
+    src/optimizations.cpp
 )
 
 # Ref: https://stackoverflow.com/a/60890947/11553216

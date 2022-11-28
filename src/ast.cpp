@@ -584,17 +584,26 @@ public:
   ValueType visitArrayIndex(const ArrayIndexNode &node) override {
     auto newArray = visit(*node.getArray());
     auto newIndex = visit(*node.getIndex());
-    removeReference(**newArray->getMetadata().valueType, newArray);
     const auto &arrayValueType = **newArray->getMetadata().valueType;
-    if (arrayValueType.getTypeClass() != TypeClass::ARRAY) {
+    if (arrayValueType.getTypeClass() != TypeClass::REFERENCE) {
+      errors.push_back(
+          PyriteError("Cannot index a non-array reference of type " +
+                          typeToString(arrayValueType),
+                      node.getMetadata()));
+      return std::make_unique<ArrayIndexNode>(
+          std::move(newArray), std::move(newIndex),
+          modifyMetadata(node, cloneType(arrayValueType)));
+    }
+    const auto &arrayReferenceType = removeReference(arrayValueType);
+    if (arrayReferenceType.getTypeClass() != TypeClass::ARRAY) {
       errors.push_back(PyriteError("Cannot index a non-array of type " +
-                                       typeToString(arrayValueType),
+                                       typeToString(arrayReferenceType),
                                    node.getMetadata()));
       return std::make_unique<ArrayIndexNode>(
           std::move(newArray), std::move(newIndex),
           modifyMetadata(node, cloneType(arrayValueType)));
     }
-    const auto &arrayType = static_cast<const ArrayType &>(arrayValueType);
+    const auto &arrayType = static_cast<const ArrayType &>(arrayReferenceType);
     convertTypesForAssignment(newIndex, IntegerType{64, false},
                               **newIndex->getMetadata().valueType);
     auto newValueType = cloneType(arrayType.getElementType());
