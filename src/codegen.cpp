@@ -140,7 +140,28 @@ public:
     globalConstructorIrBuilder.SetInsertPoint(globalConstructorEntryBlock);
   }
 
-  void postCodegen() { globalConstructorIrBuilder.CreateRetVoid(); }
+  void postCodegen() {
+    globalConstructorIrBuilder.CreateRetVoid();
+    // Use the @llvm.global_ctors global variable to run the global constructor
+    // function.
+    llvm::StructType *globalConstructorType =
+        llvm::StructType::get(context, {llvm::Type::getInt32Ty(context),
+                                        llvm::Type::getInt8PtrTy(context),
+                                        llvm::Type::getInt8PtrTy(context)});
+    Constant *globalConstructorFunctionConstant = ConstantExpr::getBitCast(
+        globalConstructorFunction, llvm::Type::getInt8PtrTy(context));
+    Constant *globalConstructorPriorityConstant =
+        ConstantInt::get(llvm::Type::getInt32Ty(context), 65535);
+    Constant *globalConstructor = ConstantStruct::get(
+        globalConstructorType,
+        {globalConstructorPriorityConstant, globalConstructorFunctionConstant,
+         ConstantPointerNull::get(llvm::Type::getInt8PtrTy(context))});
+    Constant *globalConstructorArray = ConstantArray::get(
+        llvm::ArrayType::get(globalConstructorType, 1), {globalConstructor});
+    new GlobalVariable(module, globalConstructorArray->getType(), true,
+                       GlobalValue::AppendingLinkage, globalConstructorArray,
+                       "llvm.global_ctors");
+  }
 
   ValueType visitCompilationUnit(const CompilationUnitNode &node) override {
     for (const auto &definition : node.getDefinitions()) {
@@ -158,10 +179,19 @@ public:
       variable = tmpBuilder.CreateAlloca(getLLVMType(*node.getType()));
       irBuilder.CreateStore(visit(*node.getInitializer()), variable);
     } else {
-      variable = module.getOrInsertGlobal(node.getName(),
-                                          getLLVMType(*node.getType()));
+      variable = new GlobalVariable(
+          module, getLLVMType(*node.getType()), false,
+          GlobalValue::InternalLinkage,
+          Constant::getNullValue(getLLVMType(*node.getType())), node.getName());
+      // We don't need to save and restore the IP of the ir builder because we
+      // are at global scope and it isn't pointing to anything important anyway.
+      // This is a hack to get one IRBuilder to point to the end of another.
+      irBuilder.restoreIP(globalConstructorIrBuilder.saveIP());
       globalConstructorIrBuilder.CreateStore(visit(*node.getInitializer()),
                                              variable);
+      // And we have to do it in reverse to update the global constructor
+      // builder.
+      globalConstructorIrBuilder.restoreIP(irBuilder.saveIP());
     }
     variables.back().insert({node.getName(), variable});
     return nullptr;
@@ -173,6 +203,7 @@ public:
         static_cast<llvm::FunctionType *>(pyriteToLLVMTypeTransformer.visit(
             removeReference(**node.getMetadata().valueType))),
         GlobalValue::InternalLinkage, node.getName(), module);
+    variables.back().insert({node.getName(), function});
     BasicBlock *entryBlock = BasicBlock::Create(context, "entry", function);
     auto previousInsertPoint = irBuilder.saveIP();
     irBuilder.SetInsertPoint(entryBlock);
@@ -490,9 +521,10 @@ public:
     throw std::runtime_error("Unknown unary operator");
   }
   ValueType visitVariableReference(const VariableReferenceNode &node) override {
-    for (size_t i = variables.size(); --i > 0;) {
-      const auto &variableTable = variables[i];
-      if (variableTable.count(node.getName())) {
+    for (auto iterator = variables.rbegin(); iterator != variables.rend();
+         iterator++) {
+      auto &variableTable = *iterator;
+      if (variableTable.contains(node.getName())) {
         return variableTable.at(node.getName());
       }
     }
@@ -565,20 +597,6 @@ public:
     }
   }
 
-  std::vector<Constant *> getNullStructValues(const StructType &type) {
-    std::vector<Constant *> result;
-    for (const auto &[name, field] : type.getFields()) {
-      if (field->getTypeClass() == TypeClass::STRUCT) {
-        result.push_back(ConstantStruct::get(
-            static_cast<llvm::StructType *>(getLLVMType(*field)),
-            getNullStructValues(static_cast<const StructType &>(*field))));
-      } else {
-        result.push_back(Constant::getNullValue(getLLVMType(*field)));
-      }
-    }
-    return result;
-  }
-
   size_t getStructFieldIndex(const StructType &type, const std::string &name) {
     for (size_t i = 0; i < type.getFields().size(); i++) {
       const auto &[fieldName, fieldType] = type.getFields()[i];
@@ -594,7 +612,7 @@ public:
         static_cast<const StructType &>(**node.getMetadata().valueType);
     Value *result = ConstantStruct::get(
         static_cast<llvm::StructType *>(getLLVMType(valueType)),
-        getNullStructValues(valueType));
+        Constant::getNullValue(getLLVMType(valueType)));
     for (const auto &[name, value] : node.getValues()) {
       result = irBuilder.CreateInsertValue(
           result, visit(*value), getStructFieldIndex(valueType, name));

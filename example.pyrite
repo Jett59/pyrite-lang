@@ -1,3 +1,5 @@
-any add(i32 a, i32 b) {
-    return a + b;
+i32 constant = 123;
+i32 add(i32 a, i32 b) {
+    return a + b + constant;
 }
+i32 thing = add(1, 5);

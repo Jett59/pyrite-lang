@@ -1,4 +1,5 @@
 #include "codegen.h"
+#include <iostream>
 #include <llvm/Analysis/CGSCCPassManager.h>
 #include <llvm/Analysis/LoopAnalysisManager.h>
 #include <llvm/IR/Module.h>
@@ -29,22 +30,21 @@ static llvm::OptimizationLevel getLevel(pyrite::OptimizationLevel level) {
 
 void optimize(Module &module, OptimizationLevel optimizationLevel) {
   if (optimizationLevel != OptimizationLevel::NONE) {
-    ModuleAnalysisManager moduleAnalyzer;
+    LoopAnalysisManager loopAnalysisManager;
+    FunctionAnalysisManager functionAnalysisManager;
+    CGSCCAnalysisManager cGSCCAnalysisManager;
+    ModuleAnalysisManager moduleAnalysisManager;
     PassBuilder passBuilder;
-    FunctionAnalysisManager functionAnalyzer;
-    CGSCCAnalysisManager cgsccAnalyzer;
-    LoopAnalysisManager loopAnalyzer;
-    moduleAnalyzer.registerPass(
-        [&] { return FunctionAnalysisManagerModuleProxy(functionAnalyzer); });
-    passBuilder.registerModuleAnalyses(moduleAnalyzer);
-    passBuilder.registerCGSCCAnalyses(cgsccAnalyzer);
-    passBuilder.registerFunctionAnalyses(functionAnalyzer);
-    passBuilder.registerLoopAnalyses(loopAnalyzer);
-    passBuilder.crossRegisterProxies(loopAnalyzer, functionAnalyzer,
-                                     cgsccAnalyzer, moduleAnalyzer);
+    passBuilder.registerModuleAnalyses(moduleAnalysisManager);
+    passBuilder.registerCGSCCAnalyses(cGSCCAnalysisManager);
+    passBuilder.registerFunctionAnalyses(functionAnalysisManager);
+    passBuilder.registerLoopAnalyses(loopAnalysisManager);
+    passBuilder.crossRegisterProxies(
+        loopAnalysisManager, functionAnalysisManager, cGSCCAnalysisManager,
+        moduleAnalysisManager);
     ModulePassManager passManager =
         passBuilder.buildPerModuleDefaultPipeline(getLevel(optimizationLevel));
-    passManager.run(module, moduleAnalyzer);
+    passManager.run(module, moduleAnalysisManager);
   }
 }
 } // namespace pyrite
