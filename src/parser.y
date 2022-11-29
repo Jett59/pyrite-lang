@@ -106,8 +106,7 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %left "*" "/" "%"
 %left "|" "^" "&"
 
-/* For function call operator */
-%left "("
+%left "(" "["
 
 %precedence UNARY_MINUS
 
@@ -287,6 +286,9 @@ INTEGER_LITERAL {
 }
 | expression "(" expression-list ")" {
     $$ = std::make_unique<FunctionCallNode>($1, $3, createMetadata(@1));
+}
+| expression "[" expression "]" {
+    $$ = std::make_unique<ArrayIndexNode>($1, $3, createMetadata(@1));
 }
 | expression "+" expression {
     $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::ADD, $1, $3, createMetadata(@1));

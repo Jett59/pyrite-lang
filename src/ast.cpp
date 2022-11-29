@@ -582,7 +582,8 @@ public:
             node, std::make_unique<ArrayType>(std::make_unique<AutoType>())));
   }
   ValueType visitRawArrayLiteral(const RawArrayLiteralNode &) override {
-    throw std::runtime_error("Raw array literals should not be in this stage of the AST");
+    throw std::runtime_error(
+        "Raw array literals should not be in this stage of the AST");
   }
   ValueType visitStructLiteral(const StructLiteralNode &node) override {
     std::map<std::string, ValueType> newValues;
@@ -613,25 +614,31 @@ public:
           std::move(newArray), std::move(newIndex),
           modifyMetadata(node, cloneType(arrayValueType)));
     }
-    const auto &arrayReferenceType = removeReference(arrayValueType);
-    if (arrayReferenceType.getTypeClass() != TypeClass::ARRAY) {
+    const auto &arrayReferenceType =
+        static_cast<const ReferenceType &>(arrayValueType);
+    const auto &dereferencedArrayType = removeReference(arrayValueType);
+    if (dereferencedArrayType.getTypeClass() != TypeClass::ARRAY) {
       errors.push_back(PyriteError("Cannot index a non-array of type " +
-                                       typeToString(arrayReferenceType),
+                                       typeToString(dereferencedArrayType),
                                    node.getMetadata()));
       return std::make_unique<ArrayIndexNode>(
           std::move(newArray), std::move(newIndex),
           modifyMetadata(node, cloneType(arrayValueType)));
     }
-    const auto &arrayType = static_cast<const ArrayType &>(arrayReferenceType);
+    const auto &arrayType =
+        static_cast<const ArrayType &>(dereferencedArrayType);
     convertTypesForAssignment(newIndex, IntegerType{64, false},
                               **newIndex->getMetadata().valueType);
-    auto newValueType = cloneType(arrayType.getElementType());
+    auto newValueType =
+        std::make_unique<ReferenceType>(cloneType(arrayType.getElementType()),
+                                        arrayReferenceType.getConstant());
     return std::make_unique<ArrayIndexNode>(
         std::move(newArray), std::move(newIndex),
         modifyMetadata(node, std::move(newValueType)));
   }
   ValueType visitRawArrayIndex(const RawArrayIndexNode &) override {
-    throw std::runtime_error("Raw array index should not be in this stage of the AST");
+    throw std::runtime_error(
+        "Raw array index should not be in this stage of the AST");
   }
   ValueType visitStructMember(const StructMemberNode &node) override {
     auto newStruct = visit(*node.getStructValue());
@@ -783,7 +790,8 @@ private:
 static const std::string UNION_DISCRIMINATOR_FIELD = "type";
 static const std::string UNION_VALUE_FIELD = "value";
 
-class UnionToStructTransformer : public PartialAstToAstTransformerVisitor {
+class ComplexEntityToStructTransformer
+    : public PartialAstToAstTransformerVisitor {
   static std::unique_ptr<Type> getDescriminatorType() {
     return std::make_unique<IntegerType>(32, false);
   }
@@ -795,7 +803,7 @@ class UnionToStructTransformer : public PartialAstToAstTransformerVisitor {
     return std::make_unique<RawUnionType>(std::move(options));
   }
 
-  class UnionToStructTypeTransformer
+  class ComplexEntityToStructTypeTransformer
       : public PartialTypeToTypeTransformVisitor {
   public:
     ValueType visitUnion(const UnionType &type) override {
@@ -814,15 +822,25 @@ class UnionToStructTransformer : public PartialAstToAstTransformerVisitor {
       return std::make_unique<StructType>(std::move(memberTypes),
                                           unionTypeName);
     }
+    ValueType visitArray(const ArrayType &type) override {
+      auto rawArrayType =
+          std::make_unique<RawArrayType>(visit(type.getElementType()));
+      std::vector<NameAndType> memberTypes;
+      memberTypes.emplace_back("size",
+                               std::make_unique<IntegerType>(64, false));
+      memberTypes.emplace_back("data", std::move(rawArrayType));
+      return std::make_unique<StructType>(std::move(memberTypes),
+                                          typeToString(type));
+    }
   };
 
 public:
-  UnionToStructTransformer(const TypeIdCollector &typeIdCollector)
+  ComplexEntityToStructTransformer(const TypeIdCollector &typeIdCollector)
       : typeIdCollector(typeIdCollector) {}
 
   ValueType visit(const AstNode &ast) {
     auto result = PartialAstToAstTransformerVisitor::visit(ast);
-    AstTypeTransformer typeTransformer{UnionToStructTypeTransformer{}};
+    AstTypeTransformer typeTransformer{ComplexEntityToStructTypeTransformer{}};
     result = typeTransformer.visit(*result);
     return result;
   }
@@ -857,6 +875,43 @@ public:
     return cloneAst(node);
   }
 
+  ValueType visitArrayLiteral(const ArrayLiteralNode &node) override {
+    std::vector<ValueType> values;
+    for (const auto &value : node.getValues()) {
+      values.push_back(visit(*value));
+    }
+    AstMetadata metadata = node.getMetadata().clone();
+    metadata.valueType = std::make_unique<RawArrayType>(
+        cloneType(**node.getMetadata().valueType));
+    std::map<std::string, ValueType> fields;
+    auto sizeMetadata = metadata.clone();
+    sizeMetadata.valueType = std::make_unique<IntegerType>(64, false);
+    fields.emplace("size", std::make_unique<IntegerLiteralNode>(
+                               values.size(), std::move(sizeMetadata)));
+    fields.emplace("data", std::make_unique<ArrayLiteralNode>(
+                               std::move(values), std::move(metadata)));
+    return std::make_unique<StructLiteralNode>(std::move(fields),
+                                               node.getMetadata().clone());
+  }
+
+  ValueType visitArrayIndex(const ArrayIndexNode &node) override {
+    ValueType array = visit(*node.getArray());
+    ValueType index = visit(*node.getIndex());
+    // Get the data member and use a raw array index node.
+    auto dataMetadata = array->getMetadata().clone();
+    dataMetadata.valueType = std::make_unique<RawArrayType>(
+        cloneType(removeReference(**node.getMetadata().valueType)));
+    auto dataMemberPointer = std::make_unique<StructMemberNode>(
+        std::move(array), "data", std::move(dataMetadata));
+    AstMetadata dataMemberMetadata = dataMemberPointer->getMetadata().clone();
+    dataMemberMetadata.valueType =
+        cloneType(removeReference(**dataMemberMetadata.valueType));
+    auto dataMember = std::make_unique<DereferenceNode>(
+        std::move(dataMemberPointer), std::move(dataMemberMetadata));
+    return std::make_unique<RawArrayIndexNode>(
+        std::move(dataMember), std::move(index), node.getMetadata().clone());
+  }
+
 private:
   const TypeIdCollector &typeIdCollector;
 };
@@ -866,7 +921,7 @@ std::unique_ptr<AstNode> simplifyAst(const AstNode &ast) {
   ast.accept(typeIdCollector);
   AstTypeTransformer<AnyToUnionTypeTransformer> anyToUnionTransformer{
       AnyToUnionTypeTransformer{typeIdCollector}};
-  UnionToStructTransformer unionToStructTransformer{typeIdCollector};
+  ComplexEntityToStructTransformer unionToStructTransformer{typeIdCollector};
   auto result = anyToUnionTransformer.visit(ast);
   result = unionToStructTransformer.visit(*result);
   return result;

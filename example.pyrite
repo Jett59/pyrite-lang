@@ -3,3 +3,7 @@ any add(i32 a, i32 b) {
     return a + b + constant;
 }
 any thing = add(1, 5);
+
+any index([any] array, u64 index) {
+    return array[index];
+}

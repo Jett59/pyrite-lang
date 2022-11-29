@@ -667,8 +667,10 @@ public:
     unsigned fieldIndex = static_cast<unsigned>(
         getStructFieldIndex(structType, node.getMember()));
     Value *value = visit(*node.getStructValue());
-    const Type &valueType = **node.getMetadata().valueType;
-    return irBuilder.CreateStructGEP(getLLVMType(valueType), value, fieldIndex);
+    // Q: How does the createStructGEP function work?
+    // A: It takes a pointer to a struct and returns a pointer to the specified
+    return irBuilder.CreateStructGEP(getLLVMType(structType), value,
+                                     fieldIndex);
   }
   ValueType visitArrayIndex(const ArrayIndexNode &) override {
     throw std::runtime_error("Array index not supported in code generator");
@@ -676,13 +678,10 @@ public:
   ValueType visitRawArrayIndex(const RawArrayIndexNode &node) override {
     Value *array = visit(*node.getArray());
     Value *index = visit(*node.getIndex());
-    const RawArrayType &arrayType =
-        static_cast<const RawArrayType &>(**node.getMetadata().valueType);
+    const RawArrayType &arrayType = static_cast<const RawArrayType &>(
+        **node.getArray()->getMetadata().valueType);
     auto elementType = getLLVMType(arrayType.getElementType());
-    auto pointer = irBuilder.CreateGEP(
-        elementType,
-        irBuilder.CreateBitCast(array, elementType->getPointerTo()),
-        {ConstantInt::get(llvm::Type::getInt64Ty(context), 0), index});
+    auto pointer = irBuilder.CreateInBoundsGEP(elementType, array, {index});
     return pointer;
   }
 
