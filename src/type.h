@@ -16,6 +16,7 @@ enum class TypeClass {
   BOOLEAN,
   CHAR,
   ARRAY,
+  RAW_ARRAY,
   REFERENCE,
   FUNCTION,
   STRUCT,
@@ -35,6 +36,7 @@ class FloatType;
 class BooleanType;
 class CharType;
 class ArrayType;
+class RawArrayType;
 class ReferenceType;
 class FunctionType;
 class StructType;
@@ -54,6 +56,7 @@ public:
   virtual void visit(const BooleanType &) = 0;
   virtual void visit(const CharType &) = 0;
   virtual void visit(const ArrayType &) = 0;
+  virtual void visit(const RawArrayType &) = 0;
   virtual void visit(const ReferenceType &) = 0;
   virtual void visit(const FunctionType &) = 0;
   virtual void visit(const StructType &) = 0;
@@ -138,10 +141,21 @@ public:
 
   void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 };
-class ArrayType : public Type {
+/**
+ * @brief a raw array type
+ *
+ * Dispite the name, ArrayType is not like a C array; it is more like
+ * a non-resizeable std::vector. RawArrayType is the equivalent of a C array and
+ * is only used to simplify the ArrayType for code generation.
+ */
+class RawArrayType : public Type {
+protected:
+  RawArrayType(std::unique_ptr<Type> elementType, TypeClass typeClass)
+      : Type(typeClass), elementType(std::move(elementType)) {}
+
 public:
-  ArrayType(std::unique_ptr<Type> elementType)
-      : Type(TypeClass::ARRAY), elementType(std::move(elementType)) {}
+  RawArrayType(std::unique_ptr<Type> elementType)
+      : Type(TypeClass::RAW_ARRAY), elementType(std::move(elementType)) {}
 
   const Type &getElementType() const { return *elementType; }
 
@@ -149,6 +163,13 @@ public:
 
 private:
   std::unique_ptr<Type> elementType;
+};
+class ArrayType : public RawArrayType {
+public:
+  ArrayType(std::unique_ptr<Type> elementType)
+      : RawArrayType(std::move(elementType), TypeClass::ARRAY) {}
+
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 };
 class ReferenceType : public Type {
 public:
@@ -204,20 +225,6 @@ public:
 private:
   std::vector<NameAndType> fields;
 };
-class UnionType : public Type {
-public:
-  UnionType(std::vector<std::unique_ptr<Type>> options)
-      : Type(TypeClass::UNION), options(std::move(options)) {}
-
-  const std::vector<std::unique_ptr<Type>> &getOptions() const {
-    return options;
-  }
-
-  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
-
-private:
-  std::vector<std::unique_ptr<Type>> options;
-};
 /**
  * @brief a raw union type
  *
@@ -226,6 +233,10 @@ private:
  * simplify the UnionType for code generation.
  */
 class RawUnionType : public Type {
+protected:
+  RawUnionType(std::vector<std::unique_ptr<Type>> options, TypeClass typeClass)
+      : Type(typeClass), options(std::move(options)) {}
+
 public:
   RawUnionType(std::vector<std::unique_ptr<Type>> options)
       : Type(TypeClass::RAW_UNION), options(std::move(options)) {}
@@ -236,6 +247,13 @@ public:
 
 private:
   std::vector<std::unique_ptr<Type>> options;
+};
+class UnionType : public RawUnionType {
+public:
+  UnionType(std::vector<std::unique_ptr<Type>> options)
+      : RawUnionType(std::move(options), TypeClass::UNION) {}
+
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 };
 class EnumType : public Type {
 public:
@@ -289,6 +307,10 @@ public:
   void visit(const BooleanType &type) override { result = visitBoolean(type); }
   virtual ValueType visitChar(const CharType &type) = 0;
   void visit(const CharType &type) override { result = visitChar(type); }
+  virtual ValueType visitRawArray(const RawArrayType &type) = 0;
+  void visit(const RawArrayType &type) override {
+    result = visitRawArray(type);
+  }
   virtual ValueType visitArray(const ArrayType &type) = 0;
   void visit(const ArrayType &type) override { result = visitArray(type); }
   virtual ValueType visitReference(const ReferenceType &type) = 0;
@@ -340,6 +362,9 @@ public:
   }
   ValueType visitChar(const CharType &type) override {
     return std::make_unique<CharType>();
+  }
+  ValueType visitRawArray(const RawArrayType &type) override {
+    return std::make_unique<RawArrayType>(visit(type.getElementType()));
   }
   ValueType visitArray(const ArrayType &type) override {
     return std::make_unique<ArrayType>(visit(type.getElementType()));

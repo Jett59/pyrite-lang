@@ -22,6 +22,9 @@ public:
   }
   std::string visitBoolean(const BooleanType &type) override { return "bool"; }
   std::string visitChar(const CharType &type) override { return "char"; }
+  std::string visitRawArray(const RawArrayType &type) override {
+    return "raw[" + visit(type.getElementType()) + "]";
+  }
   std::string visitArray(const ArrayType &type) override {
     return "[" + visit(type.getElementType()) + "]";
   }
@@ -131,6 +134,15 @@ public:
       return false;
     } else {
       const ArrayType &otherArray = static_cast<const ArrayType &>(other);
+      return TypesEqualTransformer{otherArray.getElementType()}.visit(
+          type.getElementType());
+    }
+  }
+  bool visitRawArray(const RawArrayType &type) override {
+    if (other.getTypeClass() != TypeClass::RAW_ARRAY) {
+      return false;
+    } else {
+      const RawArrayType &otherArray = static_cast<const RawArrayType &>(other);
       return TypesEqualTransformer{otherArray.getElementType()}.visit(
           type.getElementType());
     }

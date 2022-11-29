@@ -164,6 +164,17 @@ public:
     result += "]";
     return result;
   }
+  std::string visitRawArrayLiteral(const RawArrayLiteralNode &node) override {
+    std::string result = "raw[";
+    if (node.getValues().size() > 0) {
+      for (const auto &value : node.getValues()) {
+        result += visit(*value) + ", ";
+      }
+      result = result.substr(0, result.size() - 2);
+    }
+    result += "]";
+    return result;
+  }
   std::string visitStructLiteral(const StructLiteralNode &node) override {
     std::string result = "{";
     if (node.getValues().size() > 0) {
@@ -179,6 +190,11 @@ public:
     return possiblyAddParens(visit(*node.getArray()),
                              node.getArray()->getMetadata()) +
            "[" + visit(*node.getIndex()) + "]";
+  }
+  std::string visitRawArrayIndex(const RawArrayIndexNode &node) override {
+    return possiblyAddParens(visit(*node.getArray()),
+                             node.getArray()->getMetadata()) +
+           "raw[" + visit(*node.getIndex()) + "]";
   }
   std::string visitStructMember(const StructMemberNode &node) override {
     return possiblyAddParens(visit(*node.getStructValue()),
@@ -565,6 +581,9 @@ public:
         modifyMetadata(
             node, std::make_unique<ArrayType>(std::make_unique<AutoType>())));
   }
+  ValueType visitRawArrayLiteral(const RawArrayLiteralNode &) override {
+    throw std::runtime_error("Raw array literals should not be in this stage of the AST");
+  }
   ValueType visitStructLiteral(const StructLiteralNode &node) override {
     std::map<std::string, ValueType> newValues;
     for (auto &[name, value] : node.getValues()) {
@@ -610,6 +629,9 @@ public:
     return std::make_unique<ArrayIndexNode>(
         std::move(newArray), std::move(newIndex),
         modifyMetadata(node, std::move(newValueType)));
+  }
+  ValueType visitRawArrayIndex(const RawArrayIndexNode &) override {
+    throw std::runtime_error("Raw array index should not be in this stage of the AST");
   }
   ValueType visitStructMember(const StructMemberNode &node) override {
     auto newStruct = visit(*node.getStructValue());

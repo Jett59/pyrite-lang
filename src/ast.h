@@ -31,8 +31,10 @@ enum class AstNodeType {
   DEREFERENCE,
   CAST,
   ARRAY_LITERAL,
+  RAW_ARRAY_LITERAL,
   STRUCT_LITERAL,
   ARRAY_INDEX,
+  RAW_ARRAY_INDEX,
   STRUCT_MEMBER,
 };
 
@@ -76,8 +78,10 @@ class AssignmentNode;
 class DereferenceNode;
 class CastNode;
 class ArrayLiteralNode;
+class RawArrayLiteralNode;
 class StructLiteralNode;
 class ArrayIndexNode;
+class RawArrayIndexNode;
 class StructMemberNode;
 
 class AstVisitor {
@@ -104,8 +108,10 @@ public:
   virtual void visit(const DereferenceNode &) = 0;
   virtual void visit(const CastNode &) = 0;
   virtual void visit(const ArrayLiteralNode &) = 0;
+  virtual void visit(const RawArrayLiteralNode &) = 0;
   virtual void visit(const StructLiteralNode &) = 0;
   virtual void visit(const ArrayIndexNode &) = 0;
+  virtual void visit(const RawArrayIndexNode &) = 0;
   virtual void visit(const StructMemberNode &) = 0;
 };
 
@@ -558,11 +564,16 @@ private:
   std::unique_ptr<AstNode> value;
   std::unique_ptr<Type> type;
 };
-class ArrayLiteralNode : public AstNode {
+class RawArrayLiteralNode : public AstNode {
+protected:
+  RawArrayLiteralNode(std::vector<std::unique_ptr<AstNode>> values,
+                      AstMetadata metadata, AstNodeType astNodeType)
+      : AstNode(astNodeType, std::move(metadata)), values(std::move(values)) {}
+
 public:
-  ArrayLiteralNode(std::vector<std::unique_ptr<AstNode>> values,
-                   AstMetadata metadata)
-      : AstNode(AstNodeType::ARRAY_LITERAL, std::move(metadata)),
+  RawArrayLiteralNode(std::vector<std::unique_ptr<AstNode>> values,
+                      AstMetadata metadata)
+      : AstNode(AstNodeType::RAW_ARRAY_LITERAL, std::move(metadata)),
         values(std::move(values)) {}
 
   const std::vector<std::unique_ptr<AstNode>> &getValues() const {
@@ -573,6 +584,15 @@ public:
 
 private:
   std::vector<std::unique_ptr<AstNode>> values;
+};
+class ArrayLiteralNode : public RawArrayLiteralNode {
+public:
+  ArrayLiteralNode(std::vector<std::unique_ptr<AstNode>> values,
+                   AstMetadata metadata)
+      : RawArrayLiteralNode(std::move(values), std::move(metadata),
+                            AstNodeType::ARRAY_LITERAL) {}
+
+  void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
 };
 class StructLiteralNode : public AstNode {
 public:
@@ -588,11 +608,18 @@ public:
 private:
   std::map<std::string, std::unique_ptr<AstNode>> values;
 };
-class ArrayIndexNode : public AstNode {
+class RawArrayIndexNode : public AstNode {
+protected:
+  RawArrayIndexNode(std::unique_ptr<AstNode> array,
+                    std::unique_ptr<AstNode> index, AstMetadata metadata,
+                    AstNodeType astNodeType)
+      : AstNode(astNodeType, std::move(metadata)), array(std::move(array)),
+        index(std::move(index)) {}
+
 public:
-  ArrayIndexNode(std::unique_ptr<AstNode> array, std::unique_ptr<AstNode> index,
-                 AstMetadata metadata)
-      : AstNode(AstNodeType::ARRAY_INDEX, std::move(metadata)),
+  RawArrayIndexNode(std::unique_ptr<AstNode> array,
+                    std::unique_ptr<AstNode> index, AstMetadata metadata)
+      : AstNode(AstNodeType::RAW_ARRAY_INDEX, std::move(metadata)),
         array(std::move(array)), index(std::move(index)) {}
 
   const std::unique_ptr<AstNode> &getArray() const { return array; }
@@ -603,6 +630,15 @@ public:
 private:
   std::unique_ptr<AstNode> array;
   std::unique_ptr<AstNode> index;
+};
+class ArrayIndexNode : public RawArrayIndexNode {
+public:
+  ArrayIndexNode(std::unique_ptr<AstNode> array, std::unique_ptr<AstNode> index,
+                 AstMetadata metadata)
+      : RawArrayIndexNode(std::move(array), std::move(index),
+                          std::move(metadata), AstNodeType::ARRAY_INDEX) {}
+
+  void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
 };
 class StructMemberNode : public AstNode {
 public:
@@ -687,12 +723,21 @@ public:
       value->accept(*this);
     }
   }
+  void visit(const RawArrayLiteralNode &node) override {
+    for (const auto &value : node.getValues()) {
+      value->accept(*this);
+    }
+  }
   void visit(const StructLiteralNode &node) override {
     for (const auto &[name, value] : node.getValues()) {
       value->accept(*this);
     }
   }
   void visit(const ArrayIndexNode &node) override {
+    node.getArray()->accept(*this);
+    node.getIndex()->accept(*this);
+  }
+  void visit(const RawArrayIndexNode &node) override {
     node.getArray()->accept(*this);
     node.getIndex()->accept(*this);
   }
@@ -748,8 +793,10 @@ public:
   IMPLEMENT_VISIT_NODE(Dereference)
   IMPLEMENT_VISIT_NODE(Cast)
   IMPLEMENT_VISIT_NODE(ArrayLiteral)
+  IMPLEMENT_VISIT_NODE(RawArrayLiteral)
   IMPLEMENT_VISIT_NODE(StructLiteral)
   IMPLEMENT_VISIT_NODE(ArrayIndex)
+  IMPLEMENT_VISIT_NODE(RawArrayIndex)
   IMPLEMENT_VISIT_NODE(StructMember)
 
 #undef IMPLEMENT_VISIT_NODE
@@ -885,6 +932,14 @@ public:
     return std::make_unique<ArrayLiteralNode>(std::move(newValues),
                                               node.getMetadata().clone());
   }
+  ValueType visitRawArrayLiteral(const RawArrayLiteralNode &node) override {
+    std::vector<ValueType> newValues;
+    for (const auto &value : node.getValues()) {
+      newValues.push_back(visit(*value));
+    }
+    return std::make_unique<RawArrayLiteralNode>(std::move(newValues),
+                                                 node.getMetadata().clone());
+  }
   ValueType visitStructLiteral(const StructLiteralNode &node) override {
     std::map<std::string, ValueType> newValues;
     for (const auto &[name, value] : node.getValues()) {
@@ -897,6 +952,11 @@ public:
     return std::make_unique<ArrayIndexNode>(visit(*node.getArray()),
                                             visit(*node.getIndex()),
                                             node.getMetadata().clone());
+  }
+  ValueType visitRawArrayIndex(const RawArrayIndexNode &node) override {
+    return std::make_unique<RawArrayIndexNode>(visit(*node.getArray()),
+                                               visit(*node.getIndex()),
+                                               node.getMetadata().clone());
   }
   ValueType visitStructMember(const StructMemberNode &node) override {
     return std::make_unique<StructMemberNode>(visit(*node.getStructValue()),

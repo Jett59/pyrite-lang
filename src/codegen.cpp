@@ -58,6 +58,9 @@ class CodegenAstVisitor : public AstTransformerVisitor<Value *> {
     ValueType visitArray(const ArrayType &) override {
       throw std::runtime_error("Array type not supported in code generator");
     }
+    ValueType visitRawArray(const RawArrayType &type) override {
+      return visit(type.getElementType())->getPointerTo();
+    }
     ValueType visitReference(const ReferenceType &type) override {
       return visit(type.getReferencedType())->getPointerTo();
     }
@@ -143,11 +146,11 @@ public:
   void postCodegen() {
     globalConstructorIrBuilder.CreateRetVoid();
     // Use the @llvm.global_ctors global variable to run the global constructor
-    // function.
-    llvm::StructType *globalConstructorType = llvm::StructType::get(
-        context, {llvm::Type::getInt32Ty(context),
-                  globalConstructorFunction->getType(),
-                  llvm::Type::getInt8PtrTy(context)});
+    // function. This code is slightly messy.
+    llvm::StructType *globalConstructorType =
+        llvm::StructType::get(context, {llvm::Type::getInt32Ty(context),
+                                        globalConstructorFunction->getType(),
+                                        llvm::Type::getInt8PtrTy(context)});
     Constant *globalConstructorFunctionConstant = globalConstructorFunction;
     Constant *globalConstructorPriorityConstant =
         ConstantInt::get(llvm::Type::getInt32Ty(context), 65535);
@@ -621,6 +624,43 @@ public:
   ValueType visitArrayLiteral(const ArrayLiteralNode &) override {
     throw std::runtime_error("Array literal not supported in code generator");
   }
+  ValueType visitRawArrayLiteral(const RawArrayLiteralNode &node) override {
+    const RawArrayType &valueType =
+        static_cast<const RawArrayType &>(**node.getMetadata().valueType);
+    // If this is global scope, we need to create a global variable for the
+    // array value. Otherwise we must use an alloca.
+    if (!function) {
+      auto elementType = getLLVMType(valueType.getElementType());
+      auto arrayType =
+          llvm::ArrayType::get(elementType, node.getValues().size());
+      auto globalVariable = new GlobalVariable(
+          module, arrayType, false, GlobalValue::InternalLinkage,
+          Constant::getNullValue(arrayType), "$array");
+      for (size_t i = 0; i < node.getValues().size(); i++) {
+        auto value = visit(*node.getValues()[i]);
+        auto index = ConstantInt::get(llvm::Type::getInt64Ty(context), i);
+        auto pointer = irBuilder.CreateGEP(
+            arrayType, globalVariable,
+            {ConstantInt::get(llvm::Type::getInt64Ty(context), 0), index});
+        irBuilder.CreateStore(value, pointer);
+      }
+      return ConstantExpr::getBitCast(globalVariable, getLLVMType(valueType));
+    } else {
+      auto elementType = getLLVMType(valueType.getElementType());
+      auto arrayType =
+          llvm::ArrayType::get(elementType, node.getValues().size());
+      auto arrayVariable = irBuilder.CreateAlloca(arrayType);
+      for (size_t i = 0; i < node.getValues().size(); i++) {
+        auto value = visit(*node.getValues()[i]);
+        auto index = ConstantInt::get(llvm::Type::getInt64Ty(context), i);
+        auto pointer = irBuilder.CreateGEP(
+            arrayType, arrayVariable,
+            {ConstantInt::get(llvm::Type::getInt64Ty(context), 0), index});
+        irBuilder.CreateStore(value, pointer);
+      }
+      return irBuilder.CreateBitCast(arrayVariable, getLLVMType(valueType));
+    }
+  }
   ValueType visitStructMember(const StructMemberNode &node) override {
     const StructType &structType = static_cast<const StructType &>(
         removeReference(**node.getStructValue()->getMetadata().valueType));
@@ -632,6 +672,18 @@ public:
   }
   ValueType visitArrayIndex(const ArrayIndexNode &) override {
     throw std::runtime_error("Array index not supported in code generator");
+  }
+  ValueType visitRawArrayIndex(const RawArrayIndexNode &node) override {
+    Value *array = visit(*node.getArray());
+    Value *index = visit(*node.getIndex());
+    const RawArrayType &arrayType =
+        static_cast<const RawArrayType &>(**node.getMetadata().valueType);
+    auto elementType = getLLVMType(arrayType.getElementType());
+    auto pointer = irBuilder.CreateGEP(
+        elementType,
+        irBuilder.CreateBitCast(array, elementType->getPointerTo()),
+        {ConstantInt::get(llvm::Type::getInt64Ty(context), 0), index});
+    return pointer;
   }
 
 private:
