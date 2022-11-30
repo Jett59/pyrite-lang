@@ -94,7 +94,7 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %type <std::vector<std::unique_ptr<AstNode>>> definitions statement-list expression-list
 
 %type <std::unique_ptr<Type>> type
-%type <std::vector<std::unique_ptr<Type>>> piped-type-list
+%type <std::vector<std::unique_ptr<Type>>> type-list piped-type-list
 %type <NameAndType> name-and-type
 %type <std::vector<NameAndType>> name-and-type-list
 
@@ -176,6 +176,18 @@ statement-list: /* empty */ {
 }
 | statement-list error
 
+type-list: /* empty */ {
+    /* Bison default-initializes it automatically */
+}
+| type {
+    $$.push_back($1);
+}
+| type-list "," type {
+    auto list = $1;
+    list.push_back($3);
+    $$ = std::move(list);
+}
+
 piped-type-list: type {
     $$.push_back($1);
 }
@@ -255,6 +267,15 @@ type:
 }
 | "enum" "(" piped-identifier-list ")" {
     $$ = std::make_unique<EnumType>($3);
+}
+| "&" type {
+    $$ = std::make_unique<ReferenceType>($2, true);
+}
+| "&" "mut" type {
+    $$ = std::make_unique<ReferenceType>($3, false);
+}
+| "fn" "(" type-list ")" "->" type {
+    $$ = std::make_unique<FunctionType>($6, $3);
 }
 | IDENTIFIER {
     $$ = std::make_unique<IdentifiedType>($1);

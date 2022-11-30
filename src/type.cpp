@@ -33,21 +33,22 @@ public:
            visit(type.getReferencedType());
   }
   std::string visitFunction(const FunctionType &type) override {
-    std::string result = visit(type.getReturnType()) + "(";
+    std::string result = "fn(";
     if (type.getParameters().size() > 0) {
       for (const auto &param : type.getParameters()) {
         result += visit(*param) + ", ";
       }
       result = result.substr(0, result.size() - 2);
     }
-    result += ")";
+    result += ")-> ";
+    result += visit(type.getReturnType());
     return result;
   }
   std::string visitStruct(const StructType &type) override {
     std::string result = "{";
     if (type.getFields().size() > 0) {
       for (const auto &field : type.getFields()) {
-        result += visit(*field.type) + " " + field.name + ", ";
+        result += field.name + ": " + visit(*field.type) + ", ";
       }
       result = result.substr(0, result.size() - 2);
     }
