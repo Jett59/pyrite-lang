@@ -323,7 +323,9 @@ static bool emitCast(const Type &from, const Type &to,
       const IntegerLiteralNode &integerLiteral =
           static_cast<const IntegerLiteralNode &>(*astNode);
       size_t unsignedBits = integerToType.getBits() - integerToType.getSigned();
-      uint64_t maxValue = (1 << unsignedBits) - 1;
+      uint64_t maxValue = unsignedBits != 64
+                              ? (1ull << unsignedBits) - 1ull
+                              : UINT64_MAX; // To avoid undefined behavior
       int64_t minValue = integerToType.getSigned() ? -maxValue - 1 : 0;
       int64_t value = integerLiteral.getValue();
       if (value >= minValue && static_cast<uint64_t>(value) <= maxValue) {
@@ -361,8 +363,35 @@ static bool emitCast(const Type &from, const Type &to,
       if (emitErrors) {
         errors.push_back(lossyConvertion(from, to, astNode->getMetadata()));
       }
+    } else {
+      canCast = true;
     }
-    canCast = true;
+  } else if (to.getTypeClass() == TypeClass::ARRAY &&
+             from.getTypeClass() == TypeClass::ARRAY) {
+    if (astNode->getNodeType() == AstNodeType::ARRAY_LITERAL) {
+      const ArrayLiteralNode &arrayLiteral =
+          static_cast<const ArrayLiteralNode &>(*astNode);
+      const ArrayType &arrayToType = static_cast<const ArrayType &>(to);
+      const ArrayType &arrayFromType = static_cast<const ArrayType &>(from);
+      std::vector<std::unique_ptr<AstNode>> newElements;
+      for (size_t i = 0; i < arrayLiteral.getValues().size(); i++) {
+        // We have to duplicate the value here since emitCast modifies it.
+        std::unique_ptr<AstNode> value = cloneAst(*arrayLiteral.getValues()[i]);
+        if (!emitCast(arrayFromType.getElementType(),
+                      arrayToType.getElementType(), value)) {
+          hasErrors = true;
+          break;
+        } else {
+          newElements.push_back(std::move(value));
+        }
+      }
+      if (!hasErrors) {
+        astNode = std::make_unique<ArrayLiteralNode>(
+            std::move(newElements), astNode->getMetadata().clone());
+        astNode->getMetadata().valueType = cloneType(arrayToType);
+        typesEqual = true;
+      }
+    }
   }
   if (!typesEqual) {
     if (canCast) {

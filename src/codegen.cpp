@@ -589,7 +589,8 @@ public:
         return irBuilder.CreateFPToUI(value, llvmResultType);
       }
     } else if (resultTypeClass == TypeClass::RAW_UNION) {
-      auto temporary = irBuilder.CreateAlloca(llvmResultType);
+      // Put an alloca in the entry block.
+      auto temporary = createTemporaryVariable(llvmResultType, false);
       irBuilder.CreateStore(
           value,
           irBuilder.CreateBitCast(temporary, value->getType()->getPointerTo()));
@@ -627,39 +628,19 @@ public:
   ValueType visitRawArrayLiteral(const RawArrayLiteralNode &node) override {
     const RawArrayType &valueType =
         static_cast<const RawArrayType &>(**node.getMetadata().valueType);
-    // If this is global scope, we need to create a global variable for the
-    // array value. Otherwise we must use an alloca.
-    if (!function) {
-      auto elementType = getLLVMType(valueType.getElementType());
-      auto arrayType =
-          llvm::ArrayType::get(elementType, node.getValues().size());
-      auto globalVariable = new GlobalVariable(
-          module, arrayType, false, GlobalValue::InternalLinkage,
-          Constant::getNullValue(arrayType), "$array");
-      for (size_t i = 0; i < node.getValues().size(); i++) {
-        auto value = visit(*node.getValues()[i]);
-        auto index = ConstantInt::get(llvm::Type::getInt64Ty(context), i);
-        auto pointer = irBuilder.CreateGEP(
-            arrayType, globalVariable,
-            {ConstantInt::get(llvm::Type::getInt64Ty(context), 0), index});
-        irBuilder.CreateStore(value, pointer);
-      }
-      return ConstantExpr::getBitCast(globalVariable, getLLVMType(valueType));
-    } else {
-      auto elementType = getLLVMType(valueType.getElementType());
-      auto arrayType =
-          llvm::ArrayType::get(elementType, node.getValues().size());
-      auto arrayVariable = irBuilder.CreateAlloca(arrayType);
-      for (size_t i = 0; i < node.getValues().size(); i++) {
-        auto value = visit(*node.getValues()[i]);
-        auto index = ConstantInt::get(llvm::Type::getInt64Ty(context), i);
-        auto pointer = irBuilder.CreateGEP(
-            arrayType, arrayVariable,
-            {ConstantInt::get(llvm::Type::getInt64Ty(context), 0), index});
-        irBuilder.CreateStore(value, pointer);
-      }
-      return irBuilder.CreateBitCast(arrayVariable, getLLVMType(valueType));
+    std::cout << typeToString(valueType) << std::endl;
+    auto elementType = getLLVMType(valueType.getElementType());
+    auto arrayType = llvm::ArrayType::get(elementType, node.getValues().size());
+    auto arrayVariable = createTemporaryVariable(arrayType);
+    for (size_t i = 0; i < node.getValues().size(); i++) {
+      auto value = visit(*node.getValues()[i]);
+      auto index = ConstantInt::get(llvm::Type::getInt64Ty(context), i);
+      auto pointer = irBuilder.CreateGEP(
+          arrayType, arrayVariable,
+          {ConstantInt::get(llvm::Type::getInt64Ty(context), 0), index});
+      irBuilder.CreateStore(value, pointer);
     }
+    return irBuilder.CreateBitCast(arrayVariable, getLLVMType(valueType));
   }
   ValueType visitStructMember(const StructMemberNode &node) override {
     const StructType &structType = static_cast<const StructType &>(
@@ -698,6 +679,26 @@ private:
 
   llvm::Type *getLLVMType(const pyrite::Type &type) {
     return pyriteToLLVMTypeTransformer.visit(type);
+  }
+
+  ValueType createTemporaryVariable(llvm::Type *type,
+                                    bool mustSurviveToEndOfScope = true) {
+    if (!mustSurviveToEndOfScope || function) {
+      Function *function = irBuilder.GetInsertBlock()->getParent();
+      // Put the alloca in the entry block.
+      auto oldIp = irBuilder.saveIP();
+      irBuilder.SetInsertPoint(&function->getEntryBlock(),
+                               function->getEntryBlock().begin());
+      auto temporary = irBuilder.CreateAlloca(type);
+      irBuilder.restoreIP(oldIp);
+      return temporary;
+    } else {
+      // Put the "temporary" in perminent static storage.
+      auto temporary =
+          new GlobalVariable(module, type, false, GlobalValue::InternalLinkage,
+                             Constant::getNullValue(type), "$temporary");
+      return temporary;
+    }
   }
 };
 

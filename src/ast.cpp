@@ -1,6 +1,7 @@
 #include "ast.h"
 #include "error.h"
 #include <limits>
+#include <map>
 #include <string>
 
 namespace pyrite {
@@ -30,8 +31,9 @@ public:
   }
   std::string
   visitVariableDefinition(const VariableDefinitionNode &node) override {
-    return (node.getMutable() ? "mut " : "") + typeToString(*node.getType()) +
-           " " + node.getName() + " = " + visit(*node.getInitializer()) + ";";
+    return (node.getMutable() ? "mut " : "let ") +
+           typeToString(*node.getType()) + " " + node.getName() + " = " +
+           visit(*node.getInitializer()) + ";";
   }
   std::string
   visitFunctionDefinition(const FunctionDefinitionNode &node) override {
@@ -586,9 +588,9 @@ public:
         "Raw array literals should not be in this stage of the AST");
   }
   ValueType visitStructLiteral(const StructLiteralNode &node) override {
-    std::map<std::string, ValueType> newValues;
+    std::vector<std::pair<std::string, ValueType>> newValues;
     for (auto &[name, value] : node.getValues()) {
-      newValues[name] = visit(*value);
+      newValues.push_back({name, visit(*value)});
     }
     // Create a dummy struct type with what we have right now. The type
     // converter will pick up that we are a struct literal and fix it.
@@ -865,9 +867,10 @@ public:
         value = std::make_unique<CastNode>(std::move(value),
                                            getRawUnionType(unionType),
                                            std::move(castMetadata));
-        std::map<std::string, ValueType> fields;
-        fields.emplace(UNION_DISCRIMINATOR_FIELD, std::move(*descriminator));
-        fields.emplace(UNION_VALUE_FIELD, std::move(value));
+        std::vector<std::pair<std::string, ValueType>> fields;
+        fields.emplace_back(UNION_DISCRIMINATOR_FIELD,
+                            std::move(*descriminator));
+        fields.emplace_back(UNION_VALUE_FIELD, std::move(value));
         return std::make_unique<StructLiteralNode>(std::move(fields),
                                                    node.getMetadata().clone());
       }
@@ -876,20 +879,23 @@ public:
   }
 
   ValueType visitArrayLiteral(const ArrayLiteralNode &node) override {
+    const auto &arrayType =
+        static_cast<const ArrayType &>(**node.getMetadata().valueType);
     std::vector<ValueType> values;
     for (const auto &value : node.getValues()) {
       values.push_back(visit(*value));
     }
-    AstMetadata metadata = node.getMetadata().clone();
-    metadata.valueType = std::make_unique<RawArrayType>(
-        cloneType(**node.getMetadata().valueType));
-    std::map<std::string, ValueType> fields;
-    auto sizeMetadata = metadata.clone();
+    AstMetadata dataMetadata = node.getMetadata().clone();
+    dataMetadata.valueType =
+        std::make_unique<RawArrayType>(cloneType(arrayType.getElementType()));
+    std::vector<std::pair<std::string, ValueType>> fields;
+    auto sizeMetadata = dataMetadata.clone();
     sizeMetadata.valueType = std::make_unique<IntegerType>(64, false);
-    fields.emplace("size", std::make_unique<IntegerLiteralNode>(
-                               values.size(), std::move(sizeMetadata)));
-    fields.emplace("data", std::make_unique<ArrayLiteralNode>(
-                               std::move(values), std::move(metadata)));
+    fields.emplace_back("size", std::make_unique<IntegerLiteralNode>(
+                                    values.size(), std::move(sizeMetadata)));
+    fields.emplace_back(
+        "data", std::make_unique<RawArrayLiteralNode>(std::move(values),
+                                                      std::move(dataMetadata)));
     return std::make_unique<StructLiteralNode>(std::move(fields),
                                                node.getMetadata().clone());
   }

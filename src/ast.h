@@ -3,7 +3,6 @@
 
 #include "type.h"
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -596,8 +595,9 @@ public:
 };
 class StructLiteralNode : public AstNode {
 public:
-  StructLiteralNode(std::map<std::string, std::unique_ptr<AstNode>> values,
-                    AstMetadata metadata)
+  StructLiteralNode(
+      std::vector<std::pair<std::string, std::unique_ptr<AstNode>>> values,
+      AstMetadata metadata)
       : AstNode(AstNodeType::STRUCT_LITERAL, std::move(metadata)),
         values(std::move(values)) {}
 
@@ -606,7 +606,7 @@ public:
   void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
 
 private:
-  std::map<std::string, std::unique_ptr<AstNode>> values;
+  std::vector<std::pair<std::string, std::unique_ptr<AstNode>>> values;
 };
 class RawArrayIndexNode : public AstNode {
 protected:
@@ -941,9 +941,9 @@ public:
                                                  node.getMetadata().clone());
   }
   ValueType visitStructLiteral(const StructLiteralNode &node) override {
-    std::map<std::string, ValueType> newValues;
+    std::vector<std::pair<std::string, ValueType>> newValues;
     for (const auto &[name, value] : node.getValues()) {
-      newValues.insert({name, visit(*value)});
+      newValues.push_back({name, visit(*value)});
     }
     return std::make_unique<StructLiteralNode>(std::move(newValues),
                                                node.getMetadata().clone());

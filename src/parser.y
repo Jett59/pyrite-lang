@@ -74,7 +74,7 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %token AUTO "auto" ANY "any"
 %token ENUM "enum"
 
-%token MUT "mut"
+%token MUT "mut" LET "let" FN "fn"
 
 %token PLUS "+" MINUS "-" STAR "*" SLASH "/" PERCENT "%" AMPERSAND "&" PIPE "|" CARET "^" TILDE "~" BANG "!" EQUALS "=" LESS "<" GREATER ">" QUESTION "?" COLON ":" DOT "." COMMA "," SEMICOLON ";"
 
@@ -127,14 +127,14 @@ definitions: /* empty */ {
 | definitions error
 
 definition:
-type IDENTIFIER "=" expression ";" {
-    $$ = std::make_unique<VariableDefinitionNode>($1, $2, $4, false, createMetadata(@1));
+"let" type IDENTIFIER "=" expression ";" {
+    $$ = std::make_unique<VariableDefinitionNode>($2, $3, $5, false, createMetadata(@1));
 }
 | "mut" type IDENTIFIER "=" expression ";" {
     $$ = std::make_unique<VariableDefinitionNode>($2, $3, $5, true, createMetadata(@1));
 }
-| type IDENTIFIER "(" name-and-type-list ")" block-statement {
-    $$ = std::make_unique<FunctionDefinitionNode>($2, $4, $1, $6, createMetadata(@1));
+| "fn" IDENTIFIER "(" name-and-type-list ")" "->" type block-statement {
+    $$ = std::make_unique<FunctionDefinitionNode>($2, $4, $7, $8, createMetadata(@1));
 }
 
 statement:
@@ -289,6 +289,9 @@ INTEGER_LITERAL {
 }
 | expression "[" expression "]" {
     $$ = std::make_unique<ArrayIndexNode>($1, $3, createMetadata(@1));
+}
+| "[" expression-list "]" {
+    $$ = std::make_unique<ArrayLiteralNode>($2, createMetadata(@1));
 }
 | expression "+" expression {
     $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::ADD, $1, $3, createMetadata(@1));
