@@ -74,7 +74,7 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %token AUTO "auto" ANY "any"
 %token ENUM "enum"
 
-%token MUT "mut" LET "let" FN "fn"
+%token MUT "mut" LET "let" FN "fn" EXPORT "export" EXTERN "extern"
 
 %token PLUS "+" MINUS "-" STAR "*" SLASH "/" PERCENT "%" AMPERSAND "&" PIPE "|" CARET "^" TILDE "~" BANG "!" EQUALS "=" LESS "<" GREATER ">" QUESTION "?" COLON ":" DOT "." COMMA "," SEMICOLON ";"
 
@@ -134,7 +134,10 @@ definition:
     $$ = std::make_unique<VariableDefinitionNode>($2, $3, $5, true, createMetadata(@1));
 }
 | "fn" IDENTIFIER "(" name-and-type-list ")" "->" type block-statement {
-    $$ = std::make_unique<FunctionDefinitionNode>($2, $4, $7, $8, createMetadata(@1));
+    $$ = std::make_unique<FunctionDefinitionNode>($2, $4, $7, $8, false, createMetadata(@1));
+}
+| "export" "fn" IDENTIFIER "(" name-and-type-list ")" "->" type block-statement {
+    $$ = std::make_unique<FunctionDefinitionNode>($3, $5, $8, $9, true, createMetadata(@1));
 }
 
 statement:

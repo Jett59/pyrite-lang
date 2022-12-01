@@ -83,6 +83,11 @@ class CodegenAstVisitor : public AstTransformerVisitor<Value *> {
       throw std::runtime_error("Union type not supported in code generator");
     }
     ValueType visitRawUnion(const RawUnionType &type) override {
+      if (type.getOptions().size() == 0) {
+        // The general implementation segfaults when there are no options. This
+        // is a workaround.
+        return llvm::StructType::get(context);
+      }
       std::vector<llvm::Type *> optionTypes;
       for (const auto &option : type.getOptions()) {
         optionTypes.push_back(visit(*option));
@@ -204,7 +209,9 @@ public:
     function = Function::Create(
         static_cast<llvm::FunctionType *>(pyriteToLLVMTypeTransformer.visit(
             removeReference(**node.getMetadata().valueType))),
-        GlobalValue::InternalLinkage, node.getName(), module);
+        node.getExported() ? GlobalValue::ExternalLinkage
+                           : GlobalValue::InternalLinkage,
+        node.getName(), module);
     variables.back().insert({node.getName(), function});
     BasicBlock *entryBlock = BasicBlock::Create(context, "entry", function);
     auto previousInsertPoint = irBuilder.saveIP();

@@ -1,5 +1,6 @@
-fn index([i8] array, u64 index)-> i8 {
+export fn index([any] array, u64 index)-> any {
     return array[index];
 }
 
-let any indexed = index("hello!", 2);
+let any indexed1 = index([1, 2, 3], 2);
+let any indexed2 = index(["abc", "def", "ghi"], 2);

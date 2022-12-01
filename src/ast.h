@@ -175,15 +175,18 @@ class FunctionDefinitionNode : public AstNode {
 public:
   FunctionDefinitionNode(std::string name, std::vector<NameAndType> parameters,
                          std::unique_ptr<Type> returnType,
-                         std::unique_ptr<AstNode> body, AstMetadata metadata)
+                         std::unique_ptr<AstNode> body, bool exported,
+                         AstMetadata metadata)
       : AstNode(AstNodeType::FUNCTION_DEFINITION, std::move(metadata)),
         name(std::move(name)), returnType(std::move(returnType)),
-        parameters(std::move(parameters)), body(std::move(body)) {}
+        parameters(std::move(parameters)), body(std::move(body)),
+        exported(exported) {}
 
   const std::string &getName() const { return name; }
   const std::unique_ptr<Type> &getReturnType() const { return returnType; }
   const std::vector<NameAndType> &getParameters() const { return parameters; }
   const std::unique_ptr<AstNode> &getBody() const { return body; }
+  bool getExported() const { return exported; }
 
   void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
 
@@ -192,6 +195,7 @@ private:
   std::unique_ptr<Type> returnType;
   std::vector<NameAndType> parameters;
   std::unique_ptr<AstNode> body;
+  bool exported;
 };
 class IntegerLiteralNode : public AstNode {
 public:
@@ -838,7 +842,7 @@ public:
     return std::make_unique<FunctionDefinitionNode>(
         node.getName(), std::move(newParameters),
         visitType(*node.getReturnType()), visit(*node.getBody()),
-        node.getMetadata().clone());
+        node.getExported(), node.getMetadata().clone());
   }
   ValueType visitIntegerLiteral(const IntegerLiteralNode &node) override {
     return std::make_unique<IntegerLiteralNode>(node.getValue(),

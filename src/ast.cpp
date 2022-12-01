@@ -348,7 +348,7 @@ public:
     }
     auto result = std::make_unique<FunctionDefinitionNode>(
         node.getName(), std::move(newParameters),
-        cloneType(*node.getReturnType()), std::move(body),
+        cloneType(*node.getReturnType()), std::move(body), node.getExported(),
         modifyMetadata(
             node, std::make_unique<ReferenceType>(
                       std::make_unique<FunctionType>(std::move(returnType),
@@ -721,7 +721,7 @@ public:
     auto newReturnType = visitType(*node.getReturnType());
     return std::make_unique<FunctionDefinitionNode>(
         node.getName(), std::move(newParameters), std::move(newReturnType),
-        visit(*node.getBody()), node.getMetadata().clone());
+        visit(*node.getBody()), node.getExported(), node.getMetadata().clone());
   }
 
   ValueType
