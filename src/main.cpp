@@ -128,7 +128,6 @@ int main(int argc, const char **argv) {
         std::cerr << errors.size() << " errors" << std::endl;
         return 1;
       }
-      std::cout << astToString(*ast) << std::endl;
       ast = simplifyAst(*ast);
       // Provide default output file type if none was specified
       if (options.outputFile.empty()) {
