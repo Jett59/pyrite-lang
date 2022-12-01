@@ -40,7 +40,7 @@ jobs:
 
     - name: install llvm
       run: |
-        sudo apt install -y llvm
+        sudo apt install -y llvm-dev
 
     - name: print dependency versions
       run: |
