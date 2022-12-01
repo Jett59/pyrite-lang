@@ -1,5 +1,5 @@
-fn index([any] array, u64 index)-> any {
+fn index([i8] array, u64 index)-> i8 {
     return array[index];
 }
 
-let any indexed = index([321, 123, 213], 2);
+let any indexed = index("hello!", 2);

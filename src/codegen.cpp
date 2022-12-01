@@ -628,7 +628,6 @@ public:
   ValueType visitRawArrayLiteral(const RawArrayLiteralNode &node) override {
     const RawArrayType &valueType =
         static_cast<const RawArrayType &>(**node.getMetadata().valueType);
-    std::cout << typeToString(valueType) << std::endl;
     auto elementType = getLLVMType(valueType.getElementType());
     auto arrayType = llvm::ArrayType::get(elementType, node.getValues().size());
     auto arrayVariable = createTemporaryVariable(arrayType);

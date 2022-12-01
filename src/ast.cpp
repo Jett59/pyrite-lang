@@ -853,7 +853,7 @@ public:
       const auto &expressionType = **node.getValue()->getMetadata().valueType;
       if (expressionType.getTypeClass() != TypeClass::UNION) {
         std::optional<ValueType> descriminator = std::nullopt;
-        ValueType value = cloneAst(*node.getValue());
+        ValueType value = visit(*node.getValue());
         for (int64_t i = 0; i < typeIdCollector.typeIds.size(); i++) {
           if (typeEquals(*typeIdCollector.typeIds[i].first, expressionType)) {
             AstMetadata descriminatorMetadata = node.getMetadata().clone();
@@ -875,7 +875,7 @@ public:
                                                    node.getMetadata().clone());
       }
     }
-    return cloneAst(node);
+    return visit(node);
   }
 
   ValueType visitArrayLiteral(const ArrayLiteralNode &node) override {
@@ -916,6 +916,20 @@ public:
         std::move(dataMemberPointer), std::move(dataMemberMetadata));
     return std::make_unique<RawArrayIndexNode>(
         std::move(dataMember), std::move(index), node.getMetadata().clone());
+  }
+
+  ValueType visitStringLiteral(const StringLiteralNode &node) override {
+    std::vector<ValueType> characterValues;
+    AstMetadata characterValueMetadata = node.getMetadata().clone();
+    characterValueMetadata.valueType = std::make_unique<IntegerType>(8, true);
+    for (char c : node.getValue()) {
+      characterValues.push_back(std::make_unique<IntegerLiteralNode>(
+          c, characterValueMetadata.clone()));
+    }
+    // To simplify the process we can just call visitArrayLiteral on a made-up
+    // array literal. This will avoid duplication and make it real easy.
+    return visit(ArrayLiteralNode{std::move(characterValues),
+                                  node.getMetadata().clone()});
   }
 
 private:
