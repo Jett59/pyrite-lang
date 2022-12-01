@@ -38,9 +38,13 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: install llvm
+    - name: uninstall llvm
       run: |
-        sudo apt install -y llvm-dev llvm
+        sudo apt-get remove -y llvm
+
+    - name: install latest llvm
+      run: |
+        sudo apt-get install -y llvm
 
     - name: print dependency versions
       run: |
