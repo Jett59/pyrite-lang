@@ -238,6 +238,17 @@ public:
            ", " + (node.getUseLhs() ? "lhs" : "rhs") + ": " +
            visit(*node.getPanic()) + ")";
   }
+  std::string visitExternalFunction(const ExternalFunctionNode &node) override {
+    std::string result = "c_extern fn " + node.getName() + "(";
+    if (node.getParameters().size() > 0) {
+      for (const auto &parameter : node.getParameters()) {
+        result += typeToString(*parameter.type) + " " + parameter.name + ", ";
+      }
+      result = result.substr(0, result.size() - 2);
+    }
+    result += ") -> " + typeToString(*node.getReturnType());
+    return result;
+  }
 
 private:
   size_t indent = 0;
@@ -718,6 +729,28 @@ public:
   }
   ValueType visitAssert(const AssertNode &) override {
     throw std::runtime_error("Assert should not be in this stage of the AST");
+  }
+
+  ValueType visitExternalFunction(const ExternalFunctionNode &node) override {
+    std::vector<NameAndType> newParameters;
+    for (const auto &parameter : node.getParameters()) {
+      newParameters.push_back({parameter.name, cloneType(*parameter.type)});
+    }
+    std::vector<std::unique_ptr<Type>> parameterTypes;
+    for (const auto &parameter : newParameters) {
+      parameterTypes.push_back(cloneType(*parameter.type));
+    }
+    // Get the value type.
+    auto functionType = std::make_unique<FunctionType>(
+        cloneType(*node.getReturnType()), std::move(parameterTypes));
+    auto valueType =
+        std::make_unique<ReferenceType>(std::move(functionType), true);
+    auto result = std::make_unique<ExternalFunctionNode>(
+        node.getName(), std::move(newParameters),
+        cloneType(*node.getReturnType()),
+        modifyMetadata(node, std::move(valueType)));
+    symbolTable.back().insert({node.getName(), *result});
+    return result;
   }
 
 private:

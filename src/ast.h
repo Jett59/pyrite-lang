@@ -37,6 +37,7 @@ enum class AstNodeType {
   RAW_ARRAY_INDEX,
   STRUCT_MEMBER,
   ASSERT,
+  EXTERNAL_FUNCTION,
 };
 
 struct AstMetadata {
@@ -85,6 +86,7 @@ class ArrayIndexNode;
 class RawArrayIndexNode;
 class StructMemberNode;
 class AssertNode;
+class ExternalFunctionNode;
 
 class AstVisitor {
 public:
@@ -116,6 +118,7 @@ public:
   virtual void visit(const RawArrayIndexNode &) = 0;
   virtual void visit(const StructMemberNode &) = 0;
   virtual void visit(const AssertNode &) = 0;
+  virtual void visit(const ExternalFunctionNode &) = 0;
 };
 
 class AstNode {
@@ -704,6 +707,25 @@ private:
   BinaryOperator op;
   std::unique_ptr<AstNode> panic;
 };
+class ExternalFunctionNode : public AstNode {
+public:
+  ExternalFunctionNode(std::string name, std::vector<NameAndType> parameters,
+                       std::unique_ptr<Type> returnType, AstMetadata metadata)
+      : AstNode(AstNodeType::EXTERNAL_FUNCTION, std::move(metadata)),
+        name(std::move(name)), parameters(std::move(parameters)),
+        returnType(std::move(returnType)) {}
+
+  const std::string &getName() const { return name; }
+  const std::vector<NameAndType> &getParameters() const { return parameters; }
+  const std::unique_ptr<Type> &getReturnType() const { return returnType; }
+
+  void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
+
+private:
+  std::string name;
+  std::vector<NameAndType> parameters;
+  std::unique_ptr<Type> returnType;
+};
 
 class PartialAstVisitor : public AstVisitor {
 public:
@@ -797,6 +819,7 @@ public:
     node.getRhs()->accept(*this);
     node.getPanic()->accept(*this);
   }
+  void visit(const ExternalFunctionNode &) override {}
 };
 static_assert(
     !std::is_abstract_v<PartialAstVisitor>,
@@ -852,6 +875,7 @@ public:
   IMPLEMENT_VISIT_NODE(RawArrayIndex)
   IMPLEMENT_VISIT_NODE(StructMember)
   IMPLEMENT_VISIT_NODE(Assert)
+  IMPLEMENT_VISIT_NODE(ExternalFunction)
 
 #undef IMPLEMENT_VISIT_NODE
 
@@ -1021,6 +1045,15 @@ public:
     return std::make_unique<AssertNode>(
         visit(*node.getLhs()), visit(*node.getRhs()), node.getUseLhs(),
         node.getOp(), visit(*node.getPanic()), node.getMetadata().clone());
+  }
+  ValueType visitExternalFunction(const ExternalFunctionNode &node) override {
+    std::vector<NameAndType> newParameters;
+    for (const auto &[name, type] : node.getParameters()) {
+      newParameters.push_back({name, visitType(*type)});
+    }
+    return std::make_unique<ExternalFunctionNode>(
+        node.getName(), std::move(newParameters),
+        visitType(*node.getReturnType()), node.getMetadata().clone());
   }
 };
 static_assert(!std::is_abstract_v<PartialAstToAstTransformerVisitor>,

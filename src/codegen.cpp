@@ -708,6 +708,17 @@ public:
     irBuilder.SetInsertPoint(continueBlock);
     return node.getUseLhs() ? lhs : rhs;
   }
+  ValueType visitExternalFunction(const ExternalFunctionNode &node) {
+    auto functionType =
+        getLLVMType(removeReference(**node.getMetadata().valueType));
+    auto function = llvm::Function::Create(
+        static_cast<llvm::FunctionType *>(functionType),
+        llvm::Function::ExternalLinkage, node.getName(), &module);
+    variables.back().insert(
+        {node.getName(),
+         {function, removeReference(**node.getMetadata().valueType)}});
+    return function;
+  }
 
 private:
   Module &module;

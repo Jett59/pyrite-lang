@@ -1,6 +1,7 @@
-fn [c_export] index([any] array, u64 index)-> any {
-    return array[index];
-}
+c_extern fn println(&[i8] str)-> void;
 
-let any indexed1 = index([1, 2, 3], 2);
-let any indexed2 = index(["abc", "def", "ghi"], 2);
+fn [c_export] main()-> i32 {
+    let [i8] message = "Hello, World!";
+    println(message);
+    return 0;
+}

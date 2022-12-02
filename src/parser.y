@@ -139,6 +139,9 @@ definition:
 | "fn" "[" identifier-list "]" IDENTIFIER "(" name-and-type-list ")" "->" type block-statement {
     $$ = std::make_unique<FunctionDefinitionNode>($5, $7, $10, $11, $3, createMetadata(@1));
 }
+| "c_extern" "fn" IDENTIFIER "(" name-and-type-list ")" "->" type ";" {
+    $$ = std::make_unique<ExternalFunctionNode>($3, $5, $8, createMetadata(@1));
+}
 
 statement:
 definition
