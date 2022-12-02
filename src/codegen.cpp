@@ -170,6 +170,11 @@ public:
                        "llvm.global_ctors");
   }
 
+  struct VariableInfo {
+    Value *value;
+    const pyrite::Type &type;
+  };
+
   ValueType visitCompilationUnit(const CompilationUnitNode &node) override {
     for (const auto &definition : node.getDefinitions()) {
       visit(*definition);
@@ -200,8 +205,11 @@ public:
       // builder.
       globalConstructorIrBuilder.restoreIP(irBuilder.saveIP());
     }
-    variables.back().insert({node.getName(), variable});
-    return nullptr;
+    variables.back().insert({node.getName(), {variable, *node.getType()}});
+    // Return the variable as if it were just referenced by a variable
+    // reference.
+    return visitVariableReference(
+        VariableReferenceNode{node.getName(), node.getMetadata().clone()});
   }
   ValueType
   visitFunctionDefinition(const FunctionDefinitionNode &node) override {
@@ -209,10 +217,12 @@ public:
     function = Function::Create(
         static_cast<llvm::FunctionType *>(pyriteToLLVMTypeTransformer.visit(
             removeReference(**node.getMetadata().valueType))),
-        node.getExported() ? GlobalValue::ExternalLinkage
-                           : GlobalValue::InternalLinkage,
+        node.getCExported() ? GlobalValue::ExternalLinkage
+                            : GlobalValue::InternalLinkage,
         node.getName(), module);
-    variables.back().insert({node.getName(), function});
+    variables.back().insert(
+        {node.getName(),
+         {function, removeReference(**node.getMetadata().valueType)}});
     BasicBlock *entryBlock = BasicBlock::Create(context, "entry", function);
     auto previousInsertPoint = irBuilder.saveIP();
     irBuilder.SetInsertPoint(entryBlock);
@@ -224,7 +234,8 @@ public:
       Value *parameterVariable =
           irBuilder.CreateAlloca(getLLVMType(*parameter.type));
       irBuilder.CreateStore(rawParameter, parameterVariable);
-      variables.back().insert({parameter.name, parameterVariable});
+      variables.back().insert(
+          {parameter.name, {parameterVariable, *parameter.type}});
     }
     visit(*node.getBody());
     variables.pop_back();
@@ -534,7 +545,15 @@ public:
          iterator++) {
       auto &variableTable = *iterator;
       if (variableTable.contains(node.getName())) {
-        return variableTable.at(node.getName());
+        VariableInfo variableInfo = variableTable.at(node.getName());
+        Value *variableValue = variableInfo.value;
+        // If the variable holds a reference we must dereference it now.
+        if (variableInfo.type.getTypeClass() == TypeClass::REFERENCE) {
+          return irBuilder.CreateLoad(
+              getLLVMType(**node.getMetadata().valueType), variableValue);
+        } else {
+          return variableValue;
+        }
       }
     }
     throw std::runtime_error("Variable not found: " + node.getName());
@@ -671,6 +690,24 @@ public:
     auto pointer = irBuilder.CreateInBoundsGEP(elementType, array, {index});
     return pointer;
   }
+  ValueType visitAssert(const AssertNode &node) override {
+    Value *lhs = visit(*node.getLhs());
+    Value *rhs = visit(*node.getRhs());
+    Value *condition = generateBinaryExpression(lhs, rhs, node.getOp(),
+                                                **node.getMetadata().valueType);
+    auto continueBlock =
+        llvm::BasicBlock::Create(context, "continue", function);
+    auto failBlock = llvm::BasicBlock::Create(context, "fail", function);
+    irBuilder.CreateCondBr(condition, continueBlock, failBlock);
+    irBuilder.SetInsertPoint(failBlock);
+    visit(*node.getPanic());
+    // Just in case the panic statement doesn't do it, trap for good measure.
+    irBuilder.CreateCall(
+        llvm::Intrinsic::getDeclaration(&module, llvm::Intrinsic::trap));
+    irBuilder.CreateUnreachable();
+    irBuilder.SetInsertPoint(continueBlock);
+    return node.getUseLhs() ? lhs : rhs;
+  }
 
 private:
   Module &module;
@@ -678,7 +715,7 @@ private:
   TargetMachine *targetMachine;
   IRBuilder<> irBuilder;
   Function *function = nullptr;
-  std::vector<std::map<std::string, Value *>> variables;
+  std::vector<std::map<std::string, VariableInfo>> variables;
   PyriteTypeToLLVMTypeTransformer pyriteToLLVMTypeTransformer;
   Function *globalConstructorFunction;
   IRBuilder<> globalConstructorIrBuilder;

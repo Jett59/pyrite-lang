@@ -2,6 +2,7 @@
 #define PYRITE_AST_H
 
 #include "type.h"
+#include <cassert>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -35,6 +36,7 @@ enum class AstNodeType {
   ARRAY_INDEX,
   RAW_ARRAY_INDEX,
   STRUCT_MEMBER,
+  ASSERT,
 };
 
 struct AstMetadata {
@@ -82,6 +84,7 @@ class StructLiteralNode;
 class ArrayIndexNode;
 class RawArrayIndexNode;
 class StructMemberNode;
+class AssertNode;
 
 class AstVisitor {
 public:
@@ -112,6 +115,7 @@ public:
   virtual void visit(const ArrayIndexNode &) = 0;
   virtual void visit(const RawArrayIndexNode &) = 0;
   virtual void visit(const StructMemberNode &) = 0;
+  virtual void visit(const AssertNode &) = 0;
 };
 
 class AstNode {
@@ -173,20 +177,26 @@ private:
 };
 class FunctionDefinitionNode : public AstNode {
 public:
+  static constexpr const char *C_EXPORT_ATTRIBUTE = "c_export";
+
   FunctionDefinitionNode(std::string name, std::vector<NameAndType> parameters,
                          std::unique_ptr<Type> returnType,
-                         std::unique_ptr<AstNode> body, bool exported,
+                         std::unique_ptr<AstNode> body,
+                         std::vector<std::string> attributes,
                          AstMetadata metadata)
       : AstNode(AstNodeType::FUNCTION_DEFINITION, std::move(metadata)),
         name(std::move(name)), returnType(std::move(returnType)),
         parameters(std::move(parameters)), body(std::move(body)),
-        exported(exported) {}
+        attributes(std::move(attributes)) {
+    parseAttributes();
+  }
 
   const std::string &getName() const { return name; }
   const std::unique_ptr<Type> &getReturnType() const { return returnType; }
   const std::vector<NameAndType> &getParameters() const { return parameters; }
   const std::unique_ptr<AstNode> &getBody() const { return body; }
-  bool getExported() const { return exported; }
+  bool getCExported() const { return cExported; }
+  const std::vector<std::string> getAttributes() const { return attributes; }
 
   void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
 
@@ -195,7 +205,10 @@ private:
   std::unique_ptr<Type> returnType;
   std::vector<NameAndType> parameters;
   std::unique_ptr<AstNode> body;
-  bool exported;
+  bool cExported;
+  std::vector<std::string> attributes;
+
+  void parseAttributes();
 };
 class IntegerLiteralNode : public AstNode {
 public:
@@ -660,6 +673,37 @@ private:
   std::unique_ptr<AstNode> structValue;
   std::string member;
 };
+/**
+ * @brief assert that a condition is true
+ *
+ * assert that a condition is true, returning either the LHS or RHS if
+ * true, otherwise running the provided panic statement.
+ */
+class AssertNode : public AstNode {
+public:
+  AssertNode(std::unique_ptr<AstNode> lhs, std::unique_ptr<AstNode> rhs,
+             bool useLhs, BinaryOperator op, std::unique_ptr<AstNode> panic,
+             AstMetadata metadata)
+      : AstNode(AstNodeType::ASSERT, std::move(metadata)), lhs(std::move(lhs)),
+        rhs(std::move(rhs)), useLhs(useLhs), op(op), panic(std::move(panic)) {
+    assert(isComparisonOperator(op));
+  }
+
+  const std::unique_ptr<AstNode> &getLhs() const { return lhs; }
+  const std::unique_ptr<AstNode> &getRhs() const { return rhs; }
+  bool getUseLhs() const { return useLhs; }
+  BinaryOperator getOp() const { return op; }
+  const std::unique_ptr<AstNode> &getPanic() const { return panic; }
+
+  void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
+
+private:
+  std::unique_ptr<AstNode> lhs;
+  std::unique_ptr<AstNode> rhs;
+  bool useLhs;
+  BinaryOperator op;
+  std::unique_ptr<AstNode> panic;
+};
 
 class PartialAstVisitor : public AstVisitor {
 public:
@@ -748,6 +792,11 @@ public:
   void visit(const StructMemberNode &node) override {
     node.getStructValue()->accept(*this);
   }
+  void visit(const AssertNode &node) override {
+    node.getLhs()->accept(*this);
+    node.getRhs()->accept(*this);
+    node.getPanic()->accept(*this);
+  }
 };
 static_assert(
     !std::is_abstract_v<PartialAstVisitor>,
@@ -802,6 +851,7 @@ public:
   IMPLEMENT_VISIT_NODE(ArrayIndex)
   IMPLEMENT_VISIT_NODE(RawArrayIndex)
   IMPLEMENT_VISIT_NODE(StructMember)
+  IMPLEMENT_VISIT_NODE(Assert)
 
 #undef IMPLEMENT_VISIT_NODE
 
@@ -842,7 +892,7 @@ public:
     return std::make_unique<FunctionDefinitionNode>(
         node.getName(), std::move(newParameters),
         visitType(*node.getReturnType()), visit(*node.getBody()),
-        node.getExported(), node.getMetadata().clone());
+        node.getAttributes(), node.getMetadata().clone());
   }
   ValueType visitIntegerLiteral(const IntegerLiteralNode &node) override {
     return std::make_unique<IntegerLiteralNode>(node.getValue(),
@@ -966,6 +1016,11 @@ public:
     return std::make_unique<StructMemberNode>(visit(*node.getStructValue()),
                                               node.getMember(),
                                               node.getMetadata().clone());
+  }
+  ValueType visitAssert(const AssertNode &node) override {
+    return std::make_unique<AssertNode>(
+        visit(*node.getLhs()), visit(*node.getRhs()), node.getUseLhs(),
+        node.getOp(), visit(*node.getPanic()), node.getMetadata().clone());
   }
 };
 static_assert(!std::is_abstract_v<PartialAstToAstTransformerVisitor>,

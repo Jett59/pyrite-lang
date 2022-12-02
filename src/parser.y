@@ -74,7 +74,7 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %token AUTO "auto" ANY "any"
 %token ENUM "enum"
 
-%token MUT "mut" LET "let" FN "fn" EXPORT "export" EXTERN "extern"
+%token MUT "mut" LET "let" FN "fn" C_EXTERN "c_extern" EXPORT "export"
 
 %token PLUS "+" MINUS "-" STAR "*" SLASH "/" PERCENT "%" AMPERSAND "&" PIPE "|" CARET "^" TILDE "~" BANG "!" EQUALS "=" LESS "<" GREATER ">" QUESTION "?" COLON ":" DOT "." COMMA "," SEMICOLON ";"
 
@@ -88,7 +88,7 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 
 %start compilation-unit
 
-%type <std::vector<std::string>> piped-identifier-list
+%type <std::vector<std::string>> identifier-list piped-identifier-list
 
 %type <std::unique_ptr<AstNode>> definition expression statement block-statement if-statement
 %type <std::vector<std::unique_ptr<AstNode>>> definitions statement-list expression-list
@@ -134,10 +134,10 @@ definition:
     $$ = std::make_unique<VariableDefinitionNode>($2, $3, $5, true, createMetadata(@1));
 }
 | "fn" IDENTIFIER "(" name-and-type-list ")" "->" type block-statement {
-    $$ = std::make_unique<FunctionDefinitionNode>($2, $4, $7, $8, false, createMetadata(@1));
+    $$ = std::make_unique<FunctionDefinitionNode>($2, $4, $7, $8, std::vector<std::string>{}, createMetadata(@1));
 }
-| "export" "fn" IDENTIFIER "(" name-and-type-list ")" "->" type block-statement {
-    $$ = std::make_unique<FunctionDefinitionNode>($3, $5, $8, $9, true, createMetadata(@1));
+| "fn" "[" identifier-list "]" IDENTIFIER "(" name-and-type-list ")" "->" type block-statement {
+    $$ = std::make_unique<FunctionDefinitionNode>($5, $7, $10, $11, $3, createMetadata(@1));
 }
 
 statement:
@@ -367,6 +367,16 @@ expression-list: /* empty */ {
     $$.push_back($1);
 }
 | expression-list "," expression {
+    auto list = $1;
+    list.push_back($3);
+    $$ = std::move(list);
+}
+
+
+identifier-list: IDENTIFIER {
+    $$.push_back($1);
+}
+| identifier-list ", " IDENTIFIER {
     auto list = $1;
     list.push_back($3);
     $$ = std::move(list);

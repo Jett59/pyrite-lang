@@ -5,9 +5,38 @@
 #include <string>
 
 namespace pyrite {
+void FunctionDefinitionNode::parseAttributes() {
+  for (const auto &attribute : attributes) {
+    if (attribute == C_EXPORT_ATTRIBUTE) {
+      cExported = true;
+    } else {
+      errors.push_back(
+          PyriteError{"Unknown attribute: " + attribute, getMetadata()});
+    }
+  }
+}
+
 std::unique_ptr<AstNode> cloneAst(const AstNode &ast) {
   PartialAstToAstTransformerVisitor visitor;
   return visitor.visit(ast);
+}
+
+static std::unique_ptr<VariableDefinitionNode>
+createTemporaryVariable(int number, std::unique_ptr<AstNode> initializer) {
+  auto variableMetadata = initializer->getMetadata().clone();
+  variableMetadata.valueType = std::make_unique<ReferenceType>(
+      cloneType(removeReference(**initializer->getMetadata().valueType)), true);
+  return std::make_unique<VariableDefinitionNode>(
+      cloneType(**initializer->getMetadata().valueType),
+      "$tmp" + std::to_string(number), std::move(initializer), false,
+      std::move(variableMetadata));
+}
+std::unique_ptr<AstNode>
+createTemporaryVariableReference(const VariableDefinitionNode &node) {
+  auto variableMetadata = node.getMetadata().clone();
+  variableMetadata.valueType = cloneType(**node.getMetadata().valueType);
+  return std::make_unique<VariableReferenceNode>(node.getName(),
+                                                 std::move(variableMetadata));
 }
 
 class AstToStringTransformer : public AstTransformerVisitor<std::string> {
@@ -203,6 +232,12 @@ public:
                              node.getStructValue()->getMetadata()) +
            "." + node.getMember();
   }
+  std::string visitAssert(const AssertNode &node) {
+    return "assert(" + visit(*node.getLhs()) + " " +
+           binaryOperatorToString(node.getOp()) + " " + visit(*node.getRhs()) +
+           ", " + (node.getUseLhs() ? "lhs" : "rhs") + ": " +
+           visit(*node.getPanic()) + ")";
+  }
 
 private:
   size_t indent = 0;
@@ -348,7 +383,7 @@ public:
     }
     auto result = std::make_unique<FunctionDefinitionNode>(
         node.getName(), std::move(newParameters),
-        cloneType(*node.getReturnType()), std::move(body), node.getExported(),
+        cloneType(*node.getReturnType()), std::move(body), node.getAttributes(),
         modifyMetadata(
             node, std::make_unique<ReferenceType>(
                       std::make_unique<FunctionType>(std::move(returnType),
@@ -681,6 +716,9 @@ public:
         std::move(newStruct), node.getMember(),
         modifyMetadata(node, cloneType(**memberType)));
   }
+  ValueType visitAssert(const AssertNode &) override {
+    throw std::runtime_error("Assert should not be in this stage of the AST");
+  }
 
 private:
   std::vector<std::map<std::string, const AstNode &>> symbolTable;
@@ -721,7 +759,8 @@ public:
     auto newReturnType = visitType(*node.getReturnType());
     return std::make_unique<FunctionDefinitionNode>(
         node.getName(), std::move(newParameters), std::move(newReturnType),
-        visit(*node.getBody()), node.getExported(), node.getMetadata().clone());
+        visit(*node.getBody()), node.getAttributes(),
+        node.getMetadata().clone());
   }
 
   ValueType
@@ -903,17 +942,42 @@ public:
   ValueType visitArrayIndex(const ArrayIndexNode &node) override {
     ValueType array = visit(*node.getArray());
     ValueType index = visit(*node.getIndex());
-    // Get the data member and use a raw array index node.
-    auto dataMetadata = array->getMetadata().clone();
+    // We need to access the array twice (once for the data and once for the
+    // size) so we have to put it into a temporary variable. Get the data member
+    auto arrayTemporary = createTemporaryVariable(0, std::move(array));
+    // Get the size member and assert that index is less than it.
+    // We do this first so we can use the arrayTemporary before it is moved for
+    // the data member logic.
+    auto sizeMetadata = arrayTemporary->getMetadata().clone();
+    sizeMetadata.valueType = std::make_unique<IntegerType>(64, false);
+    auto sizeMemberPointer = std::make_unique<StructMemberNode>(
+        createTemporaryVariableReference(*arrayTemporary), "size",
+        std::move(sizeMetadata));
+    AstMetadata sizeMemberMetadata = sizeMemberPointer->getMetadata().clone();
+    sizeMemberMetadata.valueType =
+        cloneType(removeReference(**sizeMemberMetadata.valueType));
+    auto sizeMember = std::make_unique<DereferenceNode>(
+        std::move(sizeMemberPointer), std::move(sizeMemberMetadata));
+    auto dataMetadata = arrayTemporary->getMetadata().clone();
     dataMetadata.valueType = std::make_unique<RawArrayType>(
         cloneType(removeReference(**node.getMetadata().valueType)));
     auto dataMemberPointer = std::make_unique<StructMemberNode>(
-        std::move(array), "data", std::move(dataMetadata));
+        std::move(arrayTemporary), "data",
+        std::move(dataMetadata)); // arrayTemporary is a reference, which is
+                                  // what we want just now.
     AstMetadata dataMemberMetadata = dataMemberPointer->getMetadata().clone();
     dataMemberMetadata.valueType =
         cloneType(removeReference(**dataMemberMetadata.valueType));
     auto dataMember = std::make_unique<DereferenceNode>(
         std::move(dataMemberPointer), std::move(dataMemberMetadata));
+    auto indexAssertMetadata = node.getIndex()->getMetadata().clone();
+    // TODO: use a proper handling system for panic.
+    auto panicMetadata = indexAssertMetadata.clone(); // "u64"
+    index = std::make_unique<AssertNode>(
+        std::move(index), std::move(sizeMember), true,
+        BinaryOperator::LESS_THAN,
+        std::make_unique<IntegerLiteralNode>(123, std::move(panicMetadata)),
+        std::move(indexAssertMetadata));
     return std::make_unique<RawArrayIndexNode>(
         std::move(dataMember), std::move(index), node.getMetadata().clone());
   }
@@ -941,9 +1005,10 @@ std::unique_ptr<AstNode> simplifyAst(const AstNode &ast) {
   ast.accept(typeIdCollector);
   AstTypeTransformer<AnyToUnionTypeTransformer> anyToUnionTransformer{
       AnyToUnionTypeTransformer{typeIdCollector}};
-  ComplexEntityToStructTransformer unionToStructTransformer{typeIdCollector};
+  ComplexEntityToStructTransformer complexEntityToStructTransformer{
+      typeIdCollector};
   auto result = anyToUnionTransformer.visit(ast);
-  result = unionToStructTransformer.visit(*result);
+  result = complexEntityToStructTransformer.visit(*result);
   return result;
 }
 } // namespace pyrite

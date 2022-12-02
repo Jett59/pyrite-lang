@@ -1,4 +1,4 @@
-export fn index([any] array, u64 index)-> any {
+fn [c_export] index([any] array, u64 index)-> any {
     return array[index];
 }
 
