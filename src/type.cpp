@@ -330,9 +330,7 @@ static bool emitCast(const Type &from, const Type &to,
       int64_t minValue = integerToType.getSigned() ? -maxValue - 1 : 0;
       int64_t value = integerLiteral.getValue();
       if (value >= minValue && static_cast<uint64_t>(value) <= maxValue) {
-        // Dirty, but we can just set the type on the metadata here which avoids
-        // excess copying.
-        astNode->getMetadata().valueType = cloneType(integerToType);
+        astNode->setValueType(cloneType(integerToType));
         typesEqual = true;
       }
     }
@@ -389,7 +387,7 @@ static bool emitCast(const Type &from, const Type &to,
       if (!hasErrors) {
         astNode = std::make_unique<ArrayLiteralNode>(
             std::move(newElements), astNode->getMetadata().clone());
-        astNode->getMetadata().valueType = cloneType(arrayToType);
+        astNode->setValueType(cloneType(arrayToType));
         typesEqual = true;
       }
     }
@@ -427,10 +425,10 @@ void convertTypesForAssignment(std::unique_ptr<AstNode> &rhsAstNode,
   if (lhsType->getTypeClass() != TypeClass::REFERENCE &&
       rhsType->getTypeClass() == TypeClass::REFERENCE) {
     removeReference(*rhsType, rhsAstNode);
-    rhsType = &**rhsAstNode->getMetadata().valueType;
+    rhsType = &rhsAstNode->getValueType();
   }
   emitCast(*rhsType, *lhsType, rhsAstNode);
-  rhsType = &**rhsAstNode->getMetadata().valueType;
+  rhsType = &rhsAstNode->getValueType();
 }
 void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
                                    std::unique_ptr<AstNode> &rhsAstNode,
@@ -442,8 +440,8 @@ void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
   const Type *rhsType = &rhs;
   removeReference(*lhsType, lhsAstNode);
   removeReference(*rhsType, rhsAstNode);
-  lhsType = &**lhsAstNode->getMetadata().valueType;
-  rhsType = &**rhsAstNode->getMetadata().valueType;
+  lhsType = &lhsAstNode->getValueType();
+  rhsType = &rhsAstNode->getValueType();
   if (lhsType->getTypeClass() != rhsType->getTypeClass()) {
     errors.push_back(incompatibleTypes(*lhsType, *rhsType, expressionMetadata));
   }
@@ -475,7 +473,7 @@ void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &valueAstNode,
   UnaryOperator op = unaryExpression.getOp();
   const Type *valueType = &type;
   removeReference(*valueType, valueAstNode);
-  valueType = &**valueAstNode->getMetadata().valueType;
+  valueType = &valueAstNode->getValueType();
   if (valueType->getTypeClass() == TypeClass::INTEGER) {
     const auto &integer = static_cast<const IntegerType &>(*valueType);
     if (op == UnaryOperator::NEGATE && !integer.getSigned()) {

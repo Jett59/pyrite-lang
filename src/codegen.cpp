@@ -216,13 +216,12 @@ public:
     Function *oldFunction = function;
     function = Function::Create(
         static_cast<llvm::FunctionType *>(pyriteToLLVMTypeTransformer.visit(
-            removeReference(**node.getMetadata().valueType))),
+            removeReference(node.getValueType()))),
         node.getCExported() ? GlobalValue::ExternalLinkage
                             : GlobalValue::InternalLinkage,
         node.getName(), module);
     variables.back().insert(
-        {node.getName(),
-         {function, removeReference(**node.getMetadata().valueType)}});
+        {node.getName(), {function, removeReference(node.getValueType())}});
     BasicBlock *entryBlock = BasicBlock::Create(context, "entry", function);
     auto previousInsertPoint = irBuilder.saveIP();
     irBuilder.SetInsertPoint(entryBlock);
@@ -245,27 +244,24 @@ public:
   }
   ValueType visitIntegerLiteral(const IntegerLiteralNode &node) override {
     if (node.getValue() < 0) {
-      return ConstantInt::getSigned(getLLVMType(**node.getMetadata().valueType),
+      return ConstantInt::getSigned(getLLVMType(node.getValueType()),
                                     node.getValue());
     } else {
-      return ConstantInt::get(getLLVMType(**node.getMetadata().valueType),
+      return ConstantInt::get(getLLVMType(node.getValueType()),
                               node.getValue());
     }
   }
   ValueType visitFloatLiteral(const FloatLiteralNode &node) override {
-    return ConstantFP::get(getLLVMType(**node.getMetadata().valueType),
-                           node.getValue());
+    return ConstantFP::get(getLLVMType(node.getValueType()), node.getValue());
   }
   ValueType visitStringLiteral(const StringLiteralNode &) override {
     throw std::runtime_error("String literals not supported in code generator");
   }
   ValueType visitBooleanLiteral(const BooleanLiteralNode &node) override {
-    return ConstantInt::get(getLLVMType(**node.getMetadata().valueType),
-                            node.getValue());
+    return ConstantInt::get(getLLVMType(node.getValueType()), node.getValue());
   }
   ValueType visitCharLiteral(const CharLiteralNode &node) override {
-    return ConstantInt::get(getLLVMType(**node.getMetadata().valueType),
-                            node.getValue());
+    return ConstantInt::get(getLLVMType(node.getValueType()), node.getValue());
   }
   ValueType visitReturnStatement(const ReturnStatementNode &node) override {
     if (node.getExpression()) {
@@ -479,7 +475,7 @@ public:
     Value *left = visit(*node.getLeft());
     Value *right = visit(*node.getRight());
     return generateBinaryExpression(left, right, node.getOp(),
-                                    **node.getLeft()->getMetadata().valueType);
+                                    node.getLeft()->getValueType());
   }
   ValueType visitUnaryExpression(const UnaryExpressionNode &node) override {
     Value *operand = visit(*node.getOperand());
@@ -499,8 +495,7 @@ public:
     }
     case UnaryOperator::PREFIX_INCREMENT: {
       Value *dereferencedOperand = irBuilder.CreateLoad(
-          getLLVMType(
-              removeReference(**node.getOperand()->getMetadata().valueType)),
+          getLLVMType(removeReference(node.getOperand()->getValueType())),
           operand);
       Value *one = ConstantInt::get(dereferencedOperand->getType(), 1);
       Value *result = irBuilder.CreateAdd(dereferencedOperand, one);
@@ -509,8 +504,7 @@ public:
     }
     case UnaryOperator::PREFIX_DECREMENT: {
       Value *dereferencedOperand = irBuilder.CreateLoad(
-          getLLVMType(
-              removeReference(**node.getOperand()->getMetadata().valueType)),
+          getLLVMType(removeReference(node.getOperand()->getValueType())),
           operand);
       Value *one = ConstantInt::get(dereferencedOperand->getType(), 1);
       Value *result = irBuilder.CreateSub(dereferencedOperand, one);
@@ -519,8 +513,7 @@ public:
     }
     case UnaryOperator::POSTFIX_INCREMENT: {
       Value *dereferencedOperand = irBuilder.CreateLoad(
-          getLLVMType(
-              removeReference(**node.getOperand()->getMetadata().valueType)),
+          getLLVMType(removeReference(node.getOperand()->getValueType())),
           operand);
       Value *one = ConstantInt::get(dereferencedOperand->getType(), 1);
       Value *result = irBuilder.CreateAdd(dereferencedOperand, one);
@@ -529,8 +522,7 @@ public:
     }
     case UnaryOperator::POSTFIX_DECREMENT: {
       Value *dereferencedOperand = irBuilder.CreateLoad(
-          getLLVMType(
-              removeReference(**node.getOperand()->getMetadata().valueType)),
+          getLLVMType(removeReference(node.getOperand()->getValueType())),
           operand);
       Value *one = ConstantInt::get(dereferencedOperand->getType(), 1);
       Value *result = irBuilder.CreateSub(dereferencedOperand, one);
@@ -549,8 +541,8 @@ public:
         Value *variableValue = variableInfo.value;
         // If the variable holds a reference we must dereference it now.
         if (variableInfo.type.getTypeClass() == TypeClass::REFERENCE) {
-          return irBuilder.CreateLoad(
-              getLLVMType(**node.getMetadata().valueType), variableValue);
+          return irBuilder.CreateLoad(getLLVMType(node.getValueType()),
+                                      variableValue);
         } else {
           return variableValue;
         }
@@ -565,8 +557,8 @@ public:
     }
     Value *function = visit(*node.getFunction());
     return irBuilder.CreateCall(
-        static_cast<llvm::FunctionType *>(getLLVMType(
-            removeReference(**node.getFunction()->getMetadata().valueType))),
+        static_cast<llvm::FunctionType *>(
+            getLLVMType(removeReference(node.getFunction()->getValueType()))),
         function, arguments);
   }
   ValueType visitAssignment(const AssignmentNode &node) override {
@@ -574,20 +566,20 @@ public:
     Value *right = visit(*node.getRhs());
     if (node.getAdditionalOperator()) {
       Value *dereferencedLeft = irBuilder.CreateLoad(right->getType(), left);
-      right = generateBinaryExpression(
-          dereferencedLeft, right, *node.getAdditionalOperator(),
-          **node.getRhs()->getMetadata().valueType);
+      right = generateBinaryExpression(dereferencedLeft, right,
+                                       *node.getAdditionalOperator(),
+                                       node.getRhs()->getValueType());
     }
     irBuilder.CreateStore(right, left);
     return left;
   }
   ValueType visitDereference(const DereferenceNode &node) {
-    return irBuilder.CreateLoad(getLLVMType(**node.getMetadata().valueType),
+    return irBuilder.CreateLoad(getLLVMType(node.getValueType()),
                                 visit(*node.getValue()));
   }
   ValueType visitCast(const CastNode &node) override {
     Value *value = visit(*node.getValue());
-    const Type &valueType = **node.getValue()->getMetadata().valueType;
+    const Type &valueType = node.getValue()->getValueType();
     const Type &resultType = *node.getType();
     auto llvmValueType = getLLVMType(valueType);
     auto llvmResultType = getLLVMType(resultType);
@@ -638,10 +630,10 @@ public:
 
   ValueType visitStructLiteral(const StructLiteralNode &node) override {
     const StructType &valueType =
-        static_cast<const StructType &>(**node.getMetadata().valueType);
-    Value *result = ConstantStruct::get(
-        static_cast<llvm::StructType *>(getLLVMType(valueType)),
-        Constant::getNullValue(getLLVMType(valueType)));
+        static_cast<const StructType &>(node.getValueType());
+    auto structType = static_cast<llvm::StructType *>(getLLVMType(valueType));
+    Value *result =
+        ConstantStruct::get(structType, Constant::getNullValue(structType));
     for (const auto &[name, value] : node.getValues()) {
       result = irBuilder.CreateInsertValue(
           result, visit(*value), getStructFieldIndex(valueType, name));
@@ -653,7 +645,7 @@ public:
   }
   ValueType visitRawArrayLiteral(const RawArrayLiteralNode &node) override {
     const RawArrayType &valueType =
-        static_cast<const RawArrayType &>(**node.getMetadata().valueType);
+        static_cast<const RawArrayType &>(node.getValueType());
     auto elementType = getLLVMType(valueType.getElementType());
     auto arrayType = llvm::ArrayType::get(elementType, node.getValues().size());
     auto arrayVariable = createTemporaryVariable(arrayType);
@@ -669,12 +661,10 @@ public:
   }
   ValueType visitStructMember(const StructMemberNode &node) override {
     const StructType &structType = static_cast<const StructType &>(
-        removeReference(**node.getStructValue()->getMetadata().valueType));
+        removeReference(node.getStructValue()->getValueType()));
     unsigned fieldIndex = static_cast<unsigned>(
         getStructFieldIndex(structType, node.getMember()));
     Value *value = visit(*node.getStructValue());
-    // Q: How does the createStructGEP function work?
-    // A: It takes a pointer to a struct and returns a pointer to the specified
     return irBuilder.CreateStructGEP(getLLVMType(structType), value,
                                      fieldIndex);
   }
@@ -684,8 +674,8 @@ public:
   ValueType visitRawArrayIndex(const RawArrayIndexNode &node) override {
     Value *array = visit(*node.getArray());
     Value *index = visit(*node.getIndex());
-    const RawArrayType &arrayType = static_cast<const RawArrayType &>(
-        **node.getArray()->getMetadata().valueType);
+    const RawArrayType &arrayType =
+        static_cast<const RawArrayType &>(node.getArray()->getValueType());
     auto elementType = getLLVMType(arrayType.getElementType());
     auto pointer = irBuilder.CreateInBoundsGEP(elementType, array, {index});
     return pointer;
@@ -693,8 +683,8 @@ public:
   ValueType visitAssert(const AssertNode &node) override {
     Value *lhs = visit(*node.getLhs());
     Value *rhs = visit(*node.getRhs());
-    Value *condition = generateBinaryExpression(lhs, rhs, node.getOp(),
-                                                **node.getMetadata().valueType);
+    Value *condition =
+        generateBinaryExpression(lhs, rhs, node.getOp(), node.getValueType());
     auto continueBlock =
         llvm::BasicBlock::Create(context, "continue", function);
     auto failBlock = llvm::BasicBlock::Create(context, "fail", function);
@@ -709,14 +699,12 @@ public:
     return node.getUseLhs() ? lhs : rhs;
   }
   ValueType visitExternalFunction(const ExternalFunctionNode &node) {
-    auto functionType =
-        getLLVMType(removeReference(**node.getMetadata().valueType));
+    auto functionType = getLLVMType(removeReference(node.getValueType()));
     auto function = llvm::Function::Create(
         static_cast<llvm::FunctionType *>(functionType),
         llvm::Function::ExternalLinkage, node.getName(), &module);
     variables.back().insert(
-        {node.getName(),
-         {function, removeReference(**node.getMetadata().valueType)}});
+        {node.getName(), {function, removeReference(node.getValueType())}});
     return function;
   }
 

@@ -134,6 +134,13 @@ public:
   // transformations on them.
   AstMetadata &getMetadata() { return metadata; }
 
+  const Type &getValueType() const { return **getMetadata().valueType; }
+  bool hasValueType() const { return getMetadata().valueType.has_value(); }
+
+  void setValueType(std::unique_ptr<Type> value) {
+    getMetadata().valueType = std::move(value);
+  }
+
   virtual void accept(AstVisitor &) const = 0;
 
 private:
