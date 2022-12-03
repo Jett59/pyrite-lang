@@ -1,7 +1,22 @@
 c_extern fn println(&[i8] str)-> void;
+c_extern fn printILn(i64 n)-> void;
+
+type number = {i32 a, u64 b, f64 c};
 
 fn [c_export] main()-> i32 {
-    let [i8] message = "Hello, World!";
-    println(message);
+    let number theNumber = {a: 1, b: 2, c: 3.1415926};
+    mut i32 i = 0;
+    while i < 50 {
+        if i % 15 == 0 {
+            println("fizzbuzz");
+        }else if i % 3 == 0 {
+            println("fizz");
+        }else if i % 5 == 0 {
+            println("buzz");
+        }else {
+            printILn(i);
+        }
+        i++;
+    }
     return 0;
 }

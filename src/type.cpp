@@ -418,7 +418,6 @@ static bool emitCast(const Type &from, const Type &to,
       for (const auto &[name, originalValue] : structLiteral.getValues()) {
         // We have to duplicate the value here since emitCast modifies it.
         std::unique_ptr<AstNode> value = cloneAst(*originalValue);
-        // Look up the types by name in the various types.
         auto fromMemberType = structFromType.getMemberType(name);
         auto toMemberType = structToType.getMemberType(name);
         if (!fromMemberType || !toMemberType ||
@@ -430,6 +429,13 @@ static bool emitCast(const Type &from, const Type &to,
         }
       }
       if (!hasErrors) {
+        if (structLiteral.getValues().size() !=
+            structToType.getFields().size()) {
+          if (emitErrors) {
+            errors.push_back(PyriteError{"Not all fields are initialized",
+                                         astNode->getMetadata()});
+          }
+        }
         astNode = std::make_unique<StructLiteralNode>(
             std::move(newValues), astNode->getMetadata().clone());
         astNode->setValueType(cloneType(structToType));

@@ -120,6 +120,29 @@ integerLiteralTokenRule(Lexer &lexer, location &location) {
 }
 
 static std::optional<TokenConstructor>
+floatLiteralTokenRule(Lexer &lexer, location &location) {
+  char c = lexer.nextCharacter();
+  if (!isdigit(c)) {
+    lexer.unreadCharacter(c);
+    return std::nullopt;
+  }
+  std::string floatLiteral;
+  floatLiteral += c;
+  while (true) {
+    c = lexer.nextCharacter();
+    if (!isdigit(c) && c != '.') {
+      lexer.unreadCharacter(c);
+      break;
+    }
+    floatLiteral += c;
+  }
+  auto tokenLocation = location;
+  return [=] {
+    return Parser::make_FLOAT_LITERAL(std::stod(floatLiteral), tokenLocation);
+  };
+}
+
+static std::optional<TokenConstructor>
 stringLiteralTokenRule(Lexer &lexer, location &location) {
   char c = lexer.nextCharacter();
   if (c != '"') {
@@ -175,6 +198,7 @@ static TokenRule tokenRules[] = {
     basicTokenRule(Parser::make_FALSE, "false"),
     identifierTokenRule,
     integerLiteralTokenRule,
+    floatLiteralTokenRule,
     stringLiteralTokenRule,
     basicTokenRule(Parser::make_EQUALS_EQUALS, "=="),
     basicTokenRule(Parser::make_BANG_EQUALS, "!="),
