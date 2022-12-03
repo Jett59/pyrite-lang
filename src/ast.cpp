@@ -5,6 +5,7 @@
 #include <limits>
 #include <map>
 #include <string>
+#include <variant>
 
 namespace pyrite {
 void FunctionDefinitionNode::parseAttributes() {
@@ -326,18 +327,20 @@ public:
     if (type.getTypeClass() == TypeClass::IDENTIFIED) {
       for (auto iterator = symbolTable.rbegin(); iterator != symbolTable.rend();
            iterator++) {
-        const auto &symbols = *iterator;
+        auto symbols = *iterator;
         auto symbol = symbols.find(type.getName());
         if (symbol != symbols.end()) {
           const auto &symbolValue = symbol->second;
-          if (const auto &typeAlias =
-                  static_cast<const TypeAliasNode &>(symbolValue);
-              symbolValue.getNodeType() == AstNodeType::TYPE_ALIAS) {
-            return cloneType(*typeAlias.getType());
-          } else {
-            errors.push_back(
-                PyriteError{type.getName() + " is not a type", metadata});
+          if (symbolValue.isAstNode()) {
+            const auto &symbolNode = symbolValue.getAstNode();
+            if (symbolNode.getNodeType() == AstNodeType::TYPE_ALIAS) {
+              const auto &typeAlias =
+                  static_cast<const TypeAliasNode &>(symbolNode);
+              return cloneType(*typeAlias.getType());
+            }
           }
+          errors.push_back(
+              PyriteError{type.getName() + " is not a type", metadata});
         }
       }
       errors.push_back(
@@ -568,13 +571,19 @@ public:
          symbolTableLevel != symbolTable.rend(); ++symbolTableLevel) {
       auto symbolTableEntry = symbolTableLevel->find(name);
       if (symbolTableEntry != symbolTableLevel->end()) {
-        const auto &definition = symbolTableEntry->second;
-        if (definition.getNodeType() == AstNodeType::TYPE_ALIAS) {
-          errors.push_back(
-              PyriteError(name + " is not a value", node.getMetadata()));
+        const auto &symbol = symbolTableEntry->second;
+        if (symbol.isAstNode()) {
+          const auto &definition = symbol.getAstNode();
+          if (definition.getNodeType() == AstNodeType::TYPE_ALIAS) {
+            errors.push_back(
+                PyriteError(name + " is not a value", node.getMetadata()));
+          }
+          return std::make_unique<VariableReferenceNode>(
+              name, modifyMetadata(node, cloneType(definition.getValueType())));
+        } else {
+          // TODO: implement this case (overload list).
+          assert(false);
         }
-        return std::make_unique<VariableReferenceNode>(
-            name, modifyMetadata(node, cloneType(definition.getValueType())));
       }
     }
     errors.push_back(PyriteError(name + " is not defined", node.getMetadata()));
@@ -815,13 +824,37 @@ public:
   }
 
 private:
-  std::vector<std::map<std::string, const AstNode &>> symbolTable;
+  struct OverloadList {
+    std::vector<const FunctionDefinitionNode *> functions;
+  };
+  struct SymbolTableEntry {
+    std::variant<const AstNode *, OverloadList> value;
+
+    SymbolTableEntry(const AstNode &astNode) : value(&astNode) {}
+
+    bool isAstNode() const {
+      return std::holds_alternative<const AstNode *>(value);
+    }
+    const AstNode &getAstNode() const {
+      return *std::get<const AstNode *>(value);
+    }
+
+    bool isOverloadList() const {
+      return std::holds_alternative<OverloadList>(value);
+    }
+    const OverloadList &getOverloadList() const {
+      return std::get<OverloadList>(value);
+    }
+    OverloadList &getOverloadList() { return std::get<OverloadList>(value); }
+  };
+
+  std::vector<std::map<std::string, SymbolTableEntry>> symbolTable;
   std::vector<const FunctionDefinitionNode *> parentFunctions;
 
   void defineVariable(std::string name, const AstNode &astNode) {
     if (symbolTable.back().contains(name)) {
-      errors.push_back(PyriteError("Variable " + name + " is already defined",
-                                   astNode.getMetadata()));
+      errors.push_back(
+          PyriteError(name + " is already defined", astNode.getMetadata()));
     }
     symbolTable.back().insert({std::move(name), astNode});
   }

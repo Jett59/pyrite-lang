@@ -25,12 +25,12 @@ include_directories(${LLVM_INCLUDE_DIRS})
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS_LIST})
 
-add_executable(pyrite
-    src/main.cpp
+add_library(pyrite
     src/lexer.cpp
     "${CMAKE_CURRENT_BINARY_DIR}/parser.cc"
     src/type.cpp
     src/ast.cpp
+    src/mangle.cpp
     src/codegen.cpp
     src/optimizations.cpp
 )
@@ -74,11 +74,15 @@ execute_process(COMMAND "${LLVM_TOOLS_BINARY_DIR}/llvm-config" --libdir
 
 message(STATUS " LLVM libdir: \"${llvm_libdir}\" ")
 
-target_link_directories(pyrite PRIVATE "${llvm_libdir}")
+target_link_directories(pyrite PUBLIC "${llvm_libdir}")
 
-target_link_libraries(pyrite PRIVATE ${llvm_libs})
+target_link_libraries(pyrite PUBLIC ${llvm_libs})
 
 target_include_directories(pyrite PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_BINARY_DIR}"
 )
+
+add_executable(pyritec src/main.cpp)
+
+target_link_libraries(pyritec PUBLIC pyrite)
