@@ -1,5 +1,6 @@
 #include "ast.h"
 #include "error.h"
+#include "mangle.h"
 #include <atomic>
 #include <limits>
 #include <map>
