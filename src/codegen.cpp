@@ -127,7 +127,6 @@ class CodegenAstVisitor : public AstTransformerVisitor<Value *> {
       throw std::runtime_error("Auto type not supported in code generator");
     }
 
-  private:
     LLVMContext &context;
     DataLayout dataLayout;
   };
@@ -139,7 +138,7 @@ public:
         irBuilder(context),
         pyriteToLLVMTypeTransformer(context, targetMachine->createDataLayout()),
         globalConstructorIrBuilder(context) {
-    variables.push_back({}); // Global scoped variables.
+    createVariableScope();
     globalConstructorFunction = Function::Create(
         llvm::FunctionType::get(llvm::Type::getVoidTy(context), false),
         GlobalValue::InternalLinkage, "$global_constructors", module);
@@ -188,8 +187,13 @@ public:
       // Add an alloca to the top of the function's entry block.
       IRBuilder<> tmpBuilder(&function->getEntryBlock(),
                              function->getEntryBlock().begin());
-      variable = tmpBuilder.CreateAlloca(getLLVMType(*node.getType()));
+      auto variableType = getLLVMType(*node.getType());
+      variable = tmpBuilder.CreateAlloca(variableType);
+      irBuilder.CreateLifetimeStart(variable, getSizeOf(variableType));
       irBuilder.CreateStore(visit(*node.getInitializer()), variable);
+      if (!node.getMutable()) {
+        irBuilder.CreateInvariantStart(variable, getSizeOf(variableType));
+      }
     } else {
       variable = new GlobalVariable(
           module, getLLVMType(*node.getType()), false,
@@ -225,19 +229,21 @@ public:
     BasicBlock *entryBlock = BasicBlock::Create(context, "entry", function);
     auto previousInsertPoint = irBuilder.saveIP();
     irBuilder.SetInsertPoint(entryBlock);
-    variables.push_back({});
+    createVariableScope();
     for (size_t i = 0; i < node.getParameters().size(); i++) {
       const auto &parameter = node.getParameters()[i];
       Value *rawParameter = function->arg_begin() + i;
       rawParameter->setName(parameter.name);
-      Value *parameterVariable =
-          irBuilder.CreateAlloca(getLLVMType(*parameter.type));
+      auto parameterType = getLLVMType(*parameter.type);
+      Value *parameterVariable = irBuilder.CreateAlloca(parameterType);
       irBuilder.CreateStore(rawParameter, parameterVariable);
+      irBuilder.CreateInvariantStart(parameterVariable,
+                                     getSizeOf(parameterType));
       variables.back().insert(
           {parameter.name, {parameterVariable, *parameter.type}});
     }
     visit(*node.getBody());
-    variables.pop_back();
+    destroyVariableScope();
     function = oldFunction;
     irBuilder.restoreIP(previousInsertPoint);
     return nullptr;
@@ -272,11 +278,11 @@ public:
     return nullptr;
   }
   ValueType visitBlockStatement(const BlockStatementNode &node) override {
-    variables.push_back({});
+    createVariableScope();
     for (const auto &statement : node.getStatements()) {
       visit(*statement);
     }
-    variables.pop_back();
+    destroyVariableScope();
     return nullptr;
   }
   ValueType visitIfStatement(const IfStatementNode &node) override {
@@ -607,12 +613,13 @@ public:
         return irBuilder.CreateFPToUI(value, llvmResultType);
       }
     } else if (resultTypeClass == TypeClass::RAW_UNION) {
-      // Put an alloca in the entry block.
       auto temporary = createTemporaryVariable(llvmResultType, false);
       irBuilder.CreateStore(
           value,
           irBuilder.CreateBitCast(temporary, value->getType()->getPointerTo()));
-      return irBuilder.CreateLoad(llvmResultType, temporary);
+      auto result = irBuilder.CreateLoad(llvmResultType, temporary);
+      destroyTemporaryVariable(temporary);
+      return result;
     } else {
       return irBuilder.CreateBitCast(value, llvmResultType);
     }
@@ -651,12 +658,14 @@ public:
     auto arrayVariable = createTemporaryVariable(arrayType);
     for (size_t i = 0; i < node.getValues().size(); i++) {
       auto value = visit(*node.getValues()[i]);
-      auto index = ConstantInt::get(llvm::Type::getInt64Ty(context), i);
+      auto llvmIndex = ConstantInt::get(llvm::Type::getInt64Ty(context), i);
       auto pointer = irBuilder.CreateGEP(
           arrayType, arrayVariable,
-          {ConstantInt::get(llvm::Type::getInt64Ty(context), 0), index});
+          {ConstantInt::get(llvm::Type::getInt64Ty(context), 0), llvmIndex});
       irBuilder.CreateStore(value, pointer);
     }
+    // TODO: Remove ASAP!
+    irBuilder.CreateInvariantStart(arrayVariable, getSizeOf(arrayType));
     return irBuilder.CreateBitCast(arrayVariable, getLLVMType(valueType));
   }
   ValueType visitStructMember(const StructMemberNode &node) override {
@@ -703,6 +712,16 @@ public:
     auto function = llvm::Function::Create(
         static_cast<llvm::FunctionType *>(functionType),
         llvm::Function::ExternalLinkage, node.getName(), &module);
+    for (size_t i = 0; i < node.getParameters().size(); i++) {
+      const auto &[name, type] = node.getParameters()[i];
+      if (type->getTypeClass() == TypeClass::REFERENCE) {
+        const auto &referenceType = static_cast<const ReferenceType &>(*type);
+        if (referenceType.getConstant()) {
+          function->addParamAttr(i,
+                                 Attribute::get(context, Attribute::ReadOnly));
+        }
+      }
+    }
     variables.back().insert(
         {node.getName(), {function, removeReference(node.getValueType())}});
     return function;
@@ -719,6 +738,30 @@ private:
   Function *globalConstructorFunction;
   IRBuilder<> globalConstructorIrBuilder;
 
+  void createVariableScope() { variables.push_back({}); }
+  void destroyVariableScope() {
+    if (auto terminator = irBuilder.GetInsertBlock()->getTerminator()) {
+      irBuilder.SetInsertPoint(terminator);
+    }
+    // Inform LLVM that the variables are dead now.
+    for (const auto &[name, info] : variables.back()) {
+      auto llvmType = getLLVMType(info.type);
+      irBuilder.CreateLifetimeEnd(info.value, getSizeOf(llvmType));
+    }
+    // Go forward to the end of the block (necessary if code depends on us still
+    // being at the instruction after the terminator).
+    irBuilder.SetInsertPoint(irBuilder.GetInsertBlock());
+    variables.pop_back();
+  }
+
+  ConstantInt *getSizeOf(llvm::Type *type) {
+    // TODO: This is a hack to get around the fact that we don't have a
+    // reference to dataLayout in this class.
+    return ConstantInt::get(
+        llvm::Type::getInt64Ty(context),
+        pyriteToLLVMTypeTransformer.dataLayout.getTypeAllocSize(type));
+  }
+
   llvm::Type *getLLVMType(const pyrite::Type &type) {
     return pyriteToLLVMTypeTransformer.visit(type);
   }
@@ -733,14 +776,20 @@ private:
                                function->getEntryBlock().begin());
       auto temporary = irBuilder.CreateAlloca(type);
       irBuilder.restoreIP(oldIp);
+      irBuilder.CreateLifetimeStart(temporary, getSizeOf(type));
       return temporary;
     } else {
       // Put the "temporary" in perminent static storage.
       auto temporary =
           new GlobalVariable(module, type, false, GlobalValue::InternalLinkage,
                              Constant::getNullValue(type), "$temporary");
+      irBuilder.CreateLifetimeStart(temporary, getSizeOf(type));
       return temporary;
     }
+  }
+
+  void destroyTemporaryVariable(Value *variable) {
+    irBuilder.CreateLifetimeEnd(variable, getSizeOf(variable->getType()));
   }
 };
 
