@@ -211,7 +211,7 @@ public:
     std::string result = "{";
     if (node.getValues().size() > 0) {
       for (const auto &value : node.getValues()) {
-        result += value.first + " = " + visit(*value.second) + ", ";
+        result += value.first + ": " + visit(*value.second) + ", ";
       }
       result = result.substr(0, result.size() - 3);
     }
@@ -511,6 +511,10 @@ public:
   }
   ValueType visitIfStatement(const IfStatementNode &node) override {
     auto condition = visit(*node.getCondition());
+    if (condition->getValueType().getTypeClass() != TypeClass::BOOLEAN) {
+      errors.push_back(
+          PyriteError("If condition must be a boolean", node.getMetadata()));
+    }
     auto thenStatement = visit(*node.getThenStatement());
     bool alwaysReturns = false;
     std::unique_ptr<AstNode> elseStatement;
@@ -525,6 +529,10 @@ public:
   }
   ValueType visitWhileStatement(const WhileStatementNode &node) override {
     auto condition = visit(*node.getCondition());
+    if (condition->getValueType().getTypeClass() != TypeClass::BOOLEAN) {
+      errors.push_back(
+          PyriteError("If condition must be a boolean", node.getMetadata()));
+    }
     auto body = visit(*node.getBody());
     if (body->getMetadata().alwaysReturns) {
       errors.push_back(
@@ -688,8 +696,7 @@ public:
     }
     return std::make_unique<StructLiteralNode>(
         std::move(newValues),
-        modifyMetadata(node, std::make_unique<StructType>(std::move(fields),
-                                                          "<Unknown>")));
+        modifyMetadata(node, std::make_unique<StructType>(std::move(fields))));
   }
   ValueType visitArrayIndex(const ArrayIndexNode &node) override {
     auto newArray = visit(*node.getArray());
@@ -797,8 +804,10 @@ public:
     return result;
   }
   ValueType visitTypeAlias(const TypeAliasNode &node) override {
+    auto newType = visitExplicitType(*node.getType(), node.getMetadata());
+    newType->setName(node.getName());
     auto result = std::make_unique<TypeAliasNode>(
-        node.getName(), visitExplicitType(*node.getType(), node.getMetadata()),
+        node.getName(), std::move(newType),
         modifyMetadata(node, std::make_unique<VoidType>()));
     defineVariable(node.getName(), *result);
     return result;
@@ -951,8 +960,7 @@ class ComplexEntityToStructTransformer
       memberTypes.emplace_back(UNION_DISCRIMINATOR_FIELD,
                                std::move(descriminatorType));
       memberTypes.emplace_back(UNION_VALUE_FIELD, std::move(rawUnionType));
-      return std::make_unique<StructType>(std::move(memberTypes),
-                                          unionTypeName);
+      return std::make_unique<StructType>(std::move(memberTypes));
     }
     ValueType visitArray(const ArrayType &type) override {
       auto rawArrayType =
@@ -961,8 +969,7 @@ class ComplexEntityToStructTransformer
       memberTypes.emplace_back("size",
                                std::make_unique<IntegerType>(64, false));
       memberTypes.emplace_back("data", std::move(rawArrayType));
-      return std::make_unique<StructType>(std::move(memberTypes),
-                                          typeToString(type));
+      return std::make_unique<StructType>(std::move(memberTypes));
     }
   };
 

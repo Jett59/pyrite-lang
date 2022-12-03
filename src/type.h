@@ -70,8 +70,7 @@ public:
 
 class Type {
 public:
-  Type(TypeClass typeClass, std::string name = "")
-      : typeClass(typeClass), name(std::move(name)) {}
+  Type(TypeClass typeClass) : typeClass(typeClass) {}
   virtual ~Type() = default;
 
   TypeClass getTypeClass() const { return typeClass; }
@@ -79,6 +78,8 @@ public:
   // This field is set to the empty string if it doesn't matter (most types) or
   // if it is specified as a literal type (E.G. an unnamed struct).
   const std::string &getName() const { return name; }
+
+  void setName(std::string name) { this->name = std::move(name); }
 
   virtual void accept(TypeVisitor &visitor) const = 0;
 
@@ -213,8 +214,8 @@ private:
 };
 class StructType : public Type {
 public:
-  StructType(std::vector<NameAndType> fields, std::string name)
-      : Type(TypeClass::STRUCT, std::move(name)), fields(std::move(fields)) {}
+  StructType(std::vector<NameAndType> fields)
+      : Type(TypeClass::STRUCT), fields(std::move(fields)) {}
 
   const std::vector<NameAndType> &getFields() const { return fields; }
 
@@ -276,7 +277,9 @@ private:
 };
 class IdentifiedType : public Type {
 public:
-  IdentifiedType(std::string name) : Type(TypeClass::IDENTIFIED, name) {}
+  IdentifiedType(std::string name) : Type(TypeClass::IDENTIFIED) {
+    setName(std::move(name));
+  }
 
   void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 };
@@ -299,9 +302,13 @@ class TypeTransformVisitor : public TypeVisitor {
 public:
   using ValueType = TemplatedValueType;
 
+  virtual ValueType visitAll(ValueType value, const Type &oldType) {
+    return value;
+  }
+
   ValueType visit(const Type &type) {
     type.accept(*this);
-    return std::move(result);
+    return visitAll(std::move(result), type);
   }
 
   virtual ValueType visitVoid(const VoidType &type) = 0;
@@ -355,6 +362,11 @@ using TypeToTypeTransformVisitor = TypeTransformVisitor<std::unique_ptr<Type>>;
 
 class PartialTypeToTypeTransformVisitor : public TypeToTypeTransformVisitor {
 public:
+  ValueType visitAll(ValueType value, const Type &oldType) override {
+    value->setName(oldType.getName());
+    return value;
+  }
+
   ValueType visitVoid(const VoidType &type) override {
     return std::make_unique<VoidType>();
   }
@@ -393,7 +405,7 @@ public:
     for (const auto &field : type.getFields()) {
       fields.push_back({field.name, visit(*field.type)});
     }
-    return std::make_unique<StructType>(std::move(fields), type.getName());
+    return std::make_unique<StructType>(std::move(fields));
   }
   ValueType visitUnion(const UnionType &type) override {
     std::vector<std::unique_ptr<Type>> options;

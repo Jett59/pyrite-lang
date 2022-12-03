@@ -3,7 +3,6 @@
 %define api.token.constructor
 %define api.value.type variant
 %define api.value.automove
-%define parse.lac full
 
 %define api.namespace { pyrite }
 
@@ -38,7 +37,7 @@ pyrite::Parser::symbol_type yylex(pyrite::Lexer& lexer) {
     return lexer.nextToken();
 }
 
-using std::make_unique;
+using namespace pyrite;
 
 pyrite::AstMetadata createMetadata(const pyrite::location &location) {
     pyrite::AstMetadata metadata;
@@ -98,6 +97,9 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %type <NameAndType> name-and-type
 %type <std::vector<NameAndType>> name-and-type-list
 
+%type <std::pair<std::string, std::unique_ptr<AstNode>>> identifier-and-expression
+%type <std::vector<std::pair<std::string, std::unique_ptr<AstNode>>>> identifier-and-expression-list
+
 %right "="
 %left "||" "&&"
 %left "==" "!="
@@ -114,7 +116,7 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %%
 
 compilation-unit: definitions {
-    *ast = make_unique<CompilationUnitNode>($1, createMetadata(@1));
+    *ast = std::make_unique<CompilationUnitNode>($1, createMetadata(@1));
 }
 
 definitions: /* empty */ {
@@ -157,7 +159,7 @@ definition
 | "return" ";" {
     $$ = std::make_unique<ReturnStatementNode>(std::nullopt, createMetadata(@1));
 }
-| if-statement
+| if-statement {$$ = $1;}
 | "while" expression block-statement {
     $$ = std::make_unique<WhileStatementNode>($2, $3, createMetadata(@1));
 }
@@ -175,9 +177,13 @@ if-statement: "if" expression block-statement "else" block-statement {
 block-statement: "{" statement-list "}" {
     $$ = std::make_unique<BlockStatementNode>($2, createMetadata(@1));
 }
+| "{" "}" {
+    $$ = std::make_unique<BlockStatementNode>(std::vector<std::unique_ptr<AstNode>>{}, createMetadata(@1));
+}
 
-statement-list: /* empty */ {
-    /* Bison default-initializes it automatically */
+statement-list:
+statement {
+    $$.push_back($1);
 }
 | statement-list statement {
     auto list = $1;
@@ -221,6 +227,20 @@ name-and-type-list: /* empty */ {
 
 name-and-type: type IDENTIFIER {
     $$ = NameAndType{$2, $1};
+}
+
+identifier-and-expression: IDENTIFIER ":" expression {
+    $$ = std::make_pair($1, $3);
+}
+
+identifier-and-expression-list: 
+identifier-and-expression {
+    $$.push_back($1);
+}
+| identifier-and-expression-list "," identifier-and-expression {
+    auto list = $1;
+    list.push_back($3);
+    $$ = std::move(list);
 }
 
 type:
@@ -287,6 +307,9 @@ type:
 | "fn" "(" type-list ")" "->" type {
     $$ = std::make_unique<FunctionType>($6, $3);
 }
+| "{" name-and-type-list "}" {
+    $$ = std::make_unique<StructType>($2);
+}
 | IDENTIFIER {
     $$ = std::make_unique<IdentifiedType>($1);
 }
@@ -323,6 +346,9 @@ INTEGER_LITERAL {
 }
 | "[" expression-list "]" {
     $$ = std::make_unique<ArrayLiteralNode>($2, createMetadata(@1));
+}
+| "{" identifier-and-expression-list "}" {
+    $$ = std::make_unique<StructLiteralNode>($2, createMetadata(@1));
 }
 | expression "+" expression {
     $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::ADD, $1, $3, createMetadata(@1));
@@ -393,7 +419,6 @@ expression-list: /* empty */ {
     list.push_back($3);
     $$ = std::move(list);
 }
-
 
 identifier-list: IDENTIFIER {
     $$.push_back($1);

@@ -13,6 +13,14 @@ std::unique_ptr<Type> cloneType(const Type &type) {
 
 class TypeToStringTransformer : public TypeTransformVisitor<std::string> {
 public:
+  std::string visitAll(std::string value, const Type &oldType) override {
+    if (!oldType.getName().empty()) {
+      return oldType.getName() + " (aka " + std::move(value) + ")";
+    } else {
+      return value;
+    }
+  }
+
   std::string visitVoid(const VoidType &type) override { return "void"; }
   std::string visitInteger(const IntegerType &type) override {
     return (type.getSigned() ? "i" : "u") + std::to_string(type.getBits());
@@ -399,6 +407,35 @@ static bool emitCast(const Type &from, const Type &to,
         typesEqual = true;
       }
     }
+  } else if (to.getTypeClass() == TypeClass::STRUCT &&
+             from.getTypeClass() == TypeClass::STRUCT) {
+    if (astNode->getNodeType() == AstNodeType::STRUCT_LITERAL) {
+      const StructLiteralNode &structLiteral =
+          static_cast<const StructLiteralNode &>(*astNode);
+      const StructType &structToType = static_cast<const StructType &>(to);
+      const StructType &structFromType = static_cast<const StructType &>(from);
+      std::vector<std::pair<std::string, std::unique_ptr<AstNode>>> newValues;
+      for (const auto &[name, originalValue] : structLiteral.getValues()) {
+        // We have to duplicate the value here since emitCast modifies it.
+        std::unique_ptr<AstNode> value = cloneAst(*originalValue);
+        // Look up the types by name in the various types.
+        auto fromMemberType = structFromType.getMemberType(name);
+        auto toMemberType = structToType.getMemberType(name);
+        if (!fromMemberType || !toMemberType ||
+            !emitCast(**fromMemberType, **toMemberType, value, false)) {
+          hasErrors = true;
+          break;
+        } else {
+          newValues.push_back({name, std::move(value)});
+        }
+      }
+      if (!hasErrors) {
+        astNode = std::make_unique<StructLiteralNode>(
+            std::move(newValues), astNode->getMetadata().clone());
+        astNode->setValueType(cloneType(structToType));
+        typesEqual = true;
+      }
+    }
   }
   if (!typesEqual) {
     if (canCast) {
@@ -450,10 +487,8 @@ void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
   removeReference(*rhsType, rhsAstNode);
   lhsType = &lhsAstNode->getValueType();
   rhsType = &rhsAstNode->getValueType();
-  if (lhsType->getTypeClass() != rhsType->getTypeClass()) {
-    errors.push_back(incompatibleTypes(*lhsType, *rhsType, expressionMetadata));
-  }
-  if (lhsType->getTypeClass() == TypeClass::INTEGER) {
+  bool typeClassesEqual = lhsType->getTypeClass() == rhsType->getTypeClass();
+  if (lhsType->getTypeClass() == TypeClass::INTEGER && typeClassesEqual) {
     const auto &lhsInteger = static_cast<const IntegerType &>(*lhsType);
     const auto &rhsInteger = static_cast<const IntegerType &>(*rhsType);
     std::unique_ptr<Type> integerType = std::make_unique<IntegerType>(
@@ -461,7 +496,7 @@ void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
         std::max(lhsInteger.getSigned(), rhsInteger.getSigned()));
     emitCast(*lhsType, *integerType, lhsAstNode);
     emitCast(*rhsType, *integerType, rhsAstNode);
-  } else if (lhsType->getTypeClass() == TypeClass::FLOAT) {
+  } else if (lhsType->getTypeClass() == TypeClass::FLOAT && typeClassesEqual) {
     const auto &lhsFloat = static_cast<const FloatType &>(*lhsType);
     const auto &rhsFloat = static_cast<const FloatType &>(*rhsType);
     std::unique_ptr<Type> floatType = std::make_unique<FloatType>(
