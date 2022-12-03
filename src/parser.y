@@ -359,6 +359,9 @@ INTEGER_LITERAL {
 | expression "||" expression {
     $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::LOGICAL_OR, $1, $3, createMetadata(@1));
 }
+| expression "=" expression {
+    $$ = std::make_unique<AssignmentNode>($1, $3, std::nullopt, createMetadata(@1));
+}
 | "-" expression %prec UNARY_MINUS {
     $$ = std::make_unique<UnaryExpressionNode>(UnaryOperator::NEGATE, $2, createMetadata(@1));
 }

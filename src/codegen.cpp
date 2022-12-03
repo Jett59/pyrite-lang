@@ -664,8 +664,6 @@ public:
           {ConstantInt::get(llvm::Type::getInt64Ty(context), 0), llvmIndex});
       irBuilder.CreateStore(value, pointer);
     }
-    // TODO: Remove ASAP!
-    irBuilder.CreateInvariantStart(arrayVariable, getSizeOf(arrayType));
     return irBuilder.CreateBitCast(arrayVariable, getLLVMType(valueType));
   }
   ValueType visitStructMember(const StructMemberNode &node) override {

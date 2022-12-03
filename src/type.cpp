@@ -365,6 +365,14 @@ static bool emitCast(const Type &from, const Type &to,
     } else {
       canCast = true;
     }
+  } else if (from.getTypeClass() != TypeClass::REFERENCE &&
+             to.getTypeClass() == TypeClass::REFERENCE) {
+    const ReferenceType &referenceToType =
+        static_cast<const ReferenceType &>(to);
+    if (typeEquals(referenceToType.getReferencedType(), from)) {
+      astNode = createTemporaryVariable(std::move(astNode));
+      typesEqual = true;
+    }
   } else if (to.getTypeClass() == TypeClass::ARRAY &&
              from.getTypeClass() == TypeClass::ARRAY) {
     if (astNode->getNodeType() == AstNodeType::ARRAY_LITERAL) {

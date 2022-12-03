@@ -186,6 +186,12 @@ private:
   std::unique_ptr<Type> referencedType;
   bool constant;
 };
+static inline bool isConstantReference(const Type &type) {
+  if (type.getTypeClass() == TypeClass::REFERENCE) {
+    return static_cast<const ReferenceType &>(type).getConstant();
+  }
+  return false;
+}
 class FunctionType : public Type {
 public:
   FunctionType(std::unique_ptr<Type> returnType,

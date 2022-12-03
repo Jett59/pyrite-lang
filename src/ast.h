@@ -1075,6 +1075,9 @@ std::string astToString(const AstNode &);
 // performs implicit conversions.
 std::unique_ptr<AstNode> typeCheck(const AstNode &ast);
 std::unique_ptr<AstNode> simplifyAst(const AstNode &ast);
+
+std::unique_ptr<VariableDefinitionNode>
+createTemporaryVariable(std::unique_ptr<AstNode> initializer);
 } // namespace pyrite
 
 #endif

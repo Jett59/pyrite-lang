@@ -1,5 +1,6 @@
 #include "ast.h"
 #include "error.h"
+#include <atomic>
 #include <limits>
 #include <map>
 #include <string>
@@ -21,14 +22,16 @@ std::unique_ptr<AstNode> cloneAst(const AstNode &ast) {
   return visitor.visit(ast);
 }
 
-static std::unique_ptr<VariableDefinitionNode>
-createTemporaryVariable(int number, std::unique_ptr<AstNode> initializer) {
+std::unique_ptr<VariableDefinitionNode>
+createTemporaryVariable(std::unique_ptr<AstNode> initializer) {
+  static std::atomic_int counter{0};
   auto variableMetadata = initializer->getMetadata().clone();
   variableMetadata.valueType = std::make_unique<ReferenceType>(
       cloneType(removeReference(initializer->getValueType())), true);
   return std::make_unique<VariableDefinitionNode>(
-      cloneType(initializer->getValueType()), "$tmp" + std::to_string(number),
-      std::move(initializer), false, std::move(variableMetadata));
+      cloneType(initializer->getValueType()),
+      "$tmp" + std::to_string(counter++), std::move(initializer), false,
+      std::move(variableMetadata));
 }
 std::unique_ptr<AstNode>
 createTemporaryVariableReference(const VariableDefinitionNode &node) {
@@ -580,9 +583,13 @@ public:
   ValueType visitAssignment(const AssignmentNode &node) override {
     auto newLhs = visit(*node.getLhs());
     auto newRhs = visit(*node.getRhs());
-    convertTypesForAssignment(newRhs, newLhs->getValueType(),
+    convertTypesForAssignment(newRhs, removeReference(newLhs->getValueType()),
                               newRhs->getValueType());
     auto valueType = cloneType(newLhs->getValueType());
+    if (isConstantReference(newLhs->getValueType())) {
+      errors.push_back(
+          PyriteError("Cannot assign to a constant", node.getMetadata()));
+    }
     return std::make_unique<AssignmentNode>(
         std::move(newLhs), std::move(newRhs), node.getAdditionalOperator(),
         modifyMetadata(node, std::move(valueType)));
@@ -940,7 +947,7 @@ public:
                                                    node.getMetadata().clone());
       }
     }
-    return visit(node);
+    return PartialAstToAstTransformerVisitor::visitCast(node);
   }
 
   ValueType visitArrayLiteral(const ArrayLiteralNode &node) override {
@@ -969,7 +976,7 @@ public:
     ValueType index = visit(*node.getIndex());
     // We need to access the array twice (once for the data and once for the
     // size) so we have to put it into a temporary variable. Get the data member
-    auto arrayTemporary = createTemporaryVariable(0, std::move(array));
+    auto arrayTemporary = createTemporaryVariable(std::move(array));
     // Get the size member and assert that index is less than it.
     // We do this first so we can use the arrayTemporary before it is moved for
     // the data member logic.
