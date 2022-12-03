@@ -70,7 +70,8 @@ public:
 
 class Type {
 public:
-  Type(TypeClass typeClass, std::string name = "") : typeClass(typeClass) {}
+  Type(TypeClass typeClass, std::string name = "")
+      : typeClass(typeClass), name(std::move(name)) {}
   virtual ~Type() = default;
 
   TypeClass getTypeClass() const { return typeClass; }

@@ -168,6 +168,7 @@ static TokenRule tokenRules[] = {
     basicTokenRule(Parser::make_MUT, "mut"),
     basicTokenRule(Parser::make_LET, "let"),
     basicTokenRule(Parser::make_FN, "fn"),
+    basicTokenRule(Parser::make_TYPE, "type"),
     basicTokenRule(Parser::make_EXPORT, "export"),
     basicTokenRule(Parser::make_C_EXTERN, "c_extern"),
     basicTokenRule(Parser::make_TRUE, "true"),

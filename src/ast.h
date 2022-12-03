@@ -38,6 +38,7 @@ enum class AstNodeType {
   STRUCT_MEMBER,
   ASSERT,
   EXTERNAL_FUNCTION,
+  TYPE_ALIAS,
 };
 
 struct AstMetadata {
@@ -87,6 +88,7 @@ class RawArrayIndexNode;
 class StructMemberNode;
 class AssertNode;
 class ExternalFunctionNode;
+class TypeAliasNode;
 
 class AstVisitor {
 public:
@@ -119,6 +121,7 @@ public:
   virtual void visit(const StructMemberNode &) = 0;
   virtual void visit(const AssertNode &) = 0;
   virtual void visit(const ExternalFunctionNode &) = 0;
+  virtual void visit(const TypeAliasNode &) = 0;
 };
 
 class AstNode {
@@ -744,6 +747,22 @@ private:
   std::vector<NameAndType> parameters;
   std::unique_ptr<Type> returnType;
 };
+class TypeAliasNode : public AstNode {
+public:
+  TypeAliasNode(std::string name, std::unique_ptr<Type> type,
+                AstMetadata metadata)
+      : AstNode(AstNodeType::TYPE_ALIAS, std::move(metadata)),
+        name(std::move(name)), type(std::move(type)) {}
+
+  const std::string &getName() const { return name; }
+  const std::unique_ptr<Type> &getType() const { return type; }
+
+  void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
+
+private:
+  std::string name;
+  std::unique_ptr<Type> type;
+};
 
 class PartialAstVisitor : public AstVisitor {
 public:
@@ -838,6 +857,7 @@ public:
     node.getPanic()->accept(*this);
   }
   void visit(const ExternalFunctionNode &) override {}
+  void visit(const TypeAliasNode &) override {}
 };
 static_assert(
     !std::is_abstract_v<PartialAstVisitor>,
@@ -894,6 +914,7 @@ public:
   IMPLEMENT_VISIT_NODE(StructMember)
   IMPLEMENT_VISIT_NODE(Assert)
   IMPLEMENT_VISIT_NODE(ExternalFunction)
+  IMPLEMENT_VISIT_NODE(TypeAlias)
 
 #undef IMPLEMENT_VISIT_NODE
 
@@ -1072,6 +1093,10 @@ public:
     return std::make_unique<ExternalFunctionNode>(
         node.getName(), std::move(newParameters),
         visitType(*node.getReturnType()), node.getMetadata().clone());
+  }
+  ValueType visitTypeAlias(const TypeAliasNode &node) override {
+    return std::make_unique<TypeAliasNode>(
+        node.getName(), visitType(*node.getType()), node.getMetadata().clone());
   }
 };
 static_assert(!std::is_abstract_v<PartialAstToAstTransformerVisitor>,

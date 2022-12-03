@@ -488,6 +488,7 @@ void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &valueAstNode,
       errors.push_back(PyriteError("Invalid operand for unary operator: " +
                                        typeToString(*valueType),
                                    unaryExpression.getMetadata()));
+      return;
     }
     valueType =
         &static_cast<const ReferenceType *>(valueType)->getReferencedType();

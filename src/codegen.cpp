@@ -724,6 +724,11 @@ public:
         {node.getName(), {function, removeReference(node.getValueType())}});
     return function;
   }
+  ValueType visitTypeAlias(const TypeAliasNode &) override {
+    // Do nothing. It is not easy to remove nodes from the AST, so we just
+    // ignore them here.
+    return nullptr;
+  }
 
 private:
   Module &module;

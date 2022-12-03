@@ -120,7 +120,6 @@ int main(int argc, const char **argv) {
       std::unique_ptr<AstNode> ast;
       Parser parser(lexer, argv[0], &ast);
       parser.parse();
-      std::cout << astToString(*ast) << std::endl;
       ast = typeCheck(*ast);
       if (errors.size() > 0) {
         for (const auto &error : errors) {

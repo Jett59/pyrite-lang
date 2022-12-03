@@ -250,6 +250,9 @@ public:
     result += ") -> " + typeToString(*node.getReturnType());
     return result;
   }
+  std::string visitTypeAlias(const TypeAliasNode &node) override {
+    return "type " + node.getName() + " = " + typeToString(*node.getType());
+  }
 
 private:
   size_t indent = 0;
@@ -281,43 +284,69 @@ std::string astToString(const AstNode &node) {
   return transformer.visit(node);
 }
 
+AstMetadata modifyMetadata(const AstMetadata &original,
+                           std::optional<std::unique_ptr<Type>> type,
+                           bool alwaysReturns) {
+  AstMetadata result = original.clone();
+  result.valueType = std::move(type);
+  result.alwaysReturns = alwaysReturns;
+  return result;
+}
+AstMetadata modifyMetadata(const AstNode &node,
+                           std::optional<std::unique_ptr<Type>> type,
+                           bool alwaysReturns) {
+  return modifyMetadata(node.getMetadata(), std::move(type), alwaysReturns);
+}
+AstMetadata modifyMetadata(const AstMetadata &original,
+                           std::unique_ptr<Type> type) {
+  return modifyMetadata(original, std::move(type), original.alwaysReturns);
+}
+AstMetadata modifyMetadata(const AstNode &node, std::unique_ptr<Type> type) {
+  return modifyMetadata(node.getMetadata(), std::move(type));
+}
+AstMetadata modifyMetadata(const AstMetadata &original, bool alwaysReturns) {
+  std::optional<std::unique_ptr<Type>> type;
+  if (original.valueType) {
+    type = cloneType(**original.valueType);
+  }
+  return modifyMetadata(original, std::move(type), alwaysReturns);
+}
+AstMetadata modifyMetadata(const AstNode &node, bool alwaysReturns) {
+  return modifyMetadata(node.getMetadata(), alwaysReturns);
+}
+AstMetadata cloneMetadata(const AstNode &node) {
+  return node.getMetadata().clone();
+}
+
 class TypeCheckTransformer : public AstToAstTransformVisitor {
-private:
-  AstMetadata modifyMetadata(const AstMetadata &original,
-                             std::optional<std::unique_ptr<Type>> type,
-                             bool alwaysReturns) {
-    AstMetadata result = original.clone();
-    result.valueType = std::move(type);
-    result.alwaysReturns = alwaysReturns;
-    return result;
-  }
-  AstMetadata modifyMetadata(const AstNode &node,
-                             std::optional<std::unique_ptr<Type>> type,
-                             bool alwaysReturns) {
-    return modifyMetadata(node.getMetadata(), std::move(type), alwaysReturns);
-  }
-  AstMetadata modifyMetadata(const AstMetadata &original,
-                             std::unique_ptr<Type> type) {
-    return modifyMetadata(original, std::move(type), original.alwaysReturns);
-  }
-  AstMetadata modifyMetadata(const AstNode &node, std::unique_ptr<Type> type) {
-    return modifyMetadata(node.getMetadata(), std::move(type));
-  }
-  AstMetadata modifyMetadata(const AstMetadata &original, bool alwaysReturns) {
-    std::optional<std::unique_ptr<Type>> type;
-    if (original.valueType) {
-      type = cloneType(**original.valueType);
+public:
+  std::unique_ptr<Type> visitExplicitType(const Type &type,
+                                          const AstMetadata &metadata) {
+    if (type.getTypeClass() == TypeClass::IDENTIFIED) {
+      for (auto iterator = symbolTable.rbegin(); iterator != symbolTable.rend();
+           iterator++) {
+        const auto &symbols = *iterator;
+        auto symbol = symbols.find(type.getName());
+        if (symbol != symbols.end()) {
+          const auto &symbolValue = symbol->second;
+          if (const auto &typeAlias =
+                  static_cast<const TypeAliasNode &>(symbolValue);
+              symbolValue.getNodeType() == AstNodeType::TYPE_ALIAS) {
+            return cloneType(*typeAlias.getType());
+          } else {
+            errors.push_back(
+                PyriteError{type.getName() + " is not a type", metadata});
+          }
+        }
+      }
+      errors.push_back(
+          PyriteError{type.getName() + " is not defined", metadata});
+      return std::make_unique<VoidType>();
+    } else {
+      return cloneType(type);
     }
-    return modifyMetadata(original, std::move(type), alwaysReturns);
-  }
-  AstMetadata modifyMetadata(const AstNode &node, bool alwaysReturns) {
-    return modifyMetadata(node.getMetadata(), alwaysReturns);
-  }
-  AstMetadata cloneMetadata(const AstNode &node) {
-    return node.getMetadata().clone();
   }
 
-public:
   ValueType visitCompilationUnit(const CompilationUnitNode &node) override {
     symbolTable.push_back({});
     std::vector<std::unique_ptr<AstNode>> newDefinitions;
@@ -345,38 +374,43 @@ public:
 
   ValueType
   visitVariableDefinition(const VariableDefinitionNode &node) override {
-    const auto &type = *node.getType();
+    auto type = visitExplicitType(*node.getType(), node.getMetadata());
     auto initializer = visit(*node.getInitializer());
     const auto &initializerType = initializer->getValueType();
-    convertTypesForAssignment(initializer, type, initializerType);
+    convertTypesForAssignment(initializer, *type, initializerType);
     auto valueType = getVariableDefinitionValueType(
-        cloneType(type), !node.getMutable(), node.getMetadata());
+        cloneType(*type), !node.getMutable(), node.getMetadata());
     auto result = std::make_unique<VariableDefinitionNode>(
-        cloneType(type), node.getName(), std::move(initializer),
+        std::move(type), node.getName(), std::move(initializer),
         node.getMutable(), modifyMetadata(node, std::move(valueType)));
-    symbolTable.back().insert({node.getName(), *result});
+    defineVariable(node.getName(), *result);
     return result;
   }
   ValueType
   visitFunctionDefinition(const FunctionDefinitionNode &node) override {
     symbolTable.push_back({});
-    auto returnType = cloneType(*node.getReturnType());
+    auto returnType =
+        visitExplicitType(*node.getReturnType(), node.getMetadata());
     std::vector<std::unique_ptr<Type>> parameterTypes;
     std::vector<NameAndType> newParameters;
     std::vector<std::unique_ptr<VariableDefinitionNode>>
         parameterVariables; // Houses the values in the symbol table.
+    parameterVariables.reserve(node.getParameters().size());
     for (auto &parameter : node.getParameters()) {
       newParameters.push_back(
-          NameAndType{parameter.name, cloneType(*parameter.type)});
-      parameterTypes.push_back(cloneType(*parameter.type));
+          NameAndType{parameter.name,
+                      visitExplicitType(*parameter.type, node.getMetadata())});
+      parameterTypes.push_back(
+          visitExplicitType(*parameter.type, node.getMetadata()));
       AstMetadata parameterVariableMetadata;
       parameterVariableMetadata.valueType = getVariableDefinitionValueType(
-          cloneType(*parameter.type), true, parameterVariableMetadata);
+          visitExplicitType(*parameter.type, node.getMetadata()), true,
+          parameterVariableMetadata);
       parameterVariables.push_back(std::make_unique<VariableDefinitionNode>(
-          cloneType(*parameter.type), parameter.name,
-          std::unique_ptr<AstNode>(nullptr), false,
+          visitExplicitType(*parameter.type, node.getMetadata()),
+          parameter.name, std::unique_ptr<AstNode>(nullptr), false,
           std::move(parameterVariableMetadata)));
-      symbolTable.back().insert({parameter.name, *parameterVariables.back()});
+      defineVariable(parameter.name, *parameterVariables.back());
     }
     parentFunctions.push_back(&node);
     auto body = visit(*node.getBody());
@@ -395,15 +429,16 @@ public:
     }
     auto result = std::make_unique<FunctionDefinitionNode>(
         node.getName(), std::move(newParameters),
-        cloneType(*node.getReturnType()), std::move(body), node.getAttributes(),
+        visitExplicitType(*node.getReturnType(), node.getMetadata()),
+        std::move(body), node.getAttributes(),
         modifyMetadata(
             node, std::make_unique<ReferenceType>(
                       std::make_unique<FunctionType>(std::move(returnType),
                                                      std::move(parameterTypes)),
                       true)));
     symbolTable.pop_back();
-    symbolTable.back().insert({node.getName(), *result});
-    return std::move(result);
+    defineVariable(node.getName(), *result);
+    return result;
   }
   ValueType visitIntegerLiteral(const IntegerLiteralNode &node) override {
     bool needsI64 = node.getValue() > std::numeric_limits<int32_t>::max();
@@ -513,13 +548,6 @@ public:
   ValueType visitUnaryExpression(const UnaryExpressionNode &node) override {
     auto operand = visit(*node.getOperand());
     convertTypesForUnaryOperator(operand, operand->getValueType(), node);
-    if (isIncrementOrDecrement(node.getOp())) {
-      if (operand->getValueType().getTypeClass() != TypeClass::REFERENCE) {
-        errors.push_back(PyriteError("Increment/decrement operator must be "
-                                     "applied to a reference",
-                                     node.getMetadata()));
-      }
-    }
     return std::make_unique<UnaryExpressionNode>(
         node.getOp(), std::move(operand),
         modifyMetadata(node, cloneType(operand->getValueType())));
@@ -532,6 +560,10 @@ public:
       auto symbolTableEntry = symbolTableLevel->find(name);
       if (symbolTableEntry != symbolTableLevel->end()) {
         const auto &definition = symbolTableEntry->second;
+        if (definition.getNodeType() == AstNodeType::TYPE_ALIAS) {
+          errors.push_back(
+              PyriteError(name + " is not a value", node.getMetadata()));
+        }
         return std::make_unique<VariableReferenceNode>(
             name, modifyMetadata(node, cloneType(definition.getValueType())));
       }
@@ -622,7 +654,7 @@ public:
   ValueType visitCast(const CastNode &node) override {
     auto newValue = visit(*node.getValue());
     const auto &originalValueType = newValue->getValueType();
-    auto newType = cloneType(*node.getType());
+    auto newType = visitExplicitType(*node.getType(), node.getMetadata());
     // TODO: Check that the cast is valid.
     return std::make_unique<CastNode>(std::move(newValue), std::move(newType),
                                       modifyMetadata(node, std::move(newType)));
@@ -743,27 +775,46 @@ public:
   ValueType visitExternalFunction(const ExternalFunctionNode &node) override {
     std::vector<NameAndType> newParameters;
     for (const auto &parameter : node.getParameters()) {
-      newParameters.push_back({parameter.name, cloneType(*parameter.type)});
+      newParameters.push_back(
+          {parameter.name,
+           visitExplicitType(*parameter.type, node.getMetadata())});
     }
     std::vector<std::unique_ptr<Type>> parameterTypes;
     for (const auto &parameter : newParameters) {
-      parameterTypes.push_back(cloneType(*parameter.type));
+      parameterTypes.push_back(
+          visitExplicitType(*parameter.type, node.getMetadata()));
     }
     auto functionType = std::make_unique<FunctionType>(
-        cloneType(*node.getReturnType()), std::move(parameterTypes));
+        visitExplicitType(*node.getReturnType(), node.getMetadata()),
+        std::move(parameterTypes));
     auto valueType =
         std::make_unique<ReferenceType>(std::move(functionType), true);
     auto result = std::make_unique<ExternalFunctionNode>(
         node.getName(), std::move(newParameters),
-        cloneType(*node.getReturnType()),
+        visitExplicitType(*node.getReturnType(), node.getMetadata()),
         modifyMetadata(node, std::move(valueType)));
-    symbolTable.back().insert({node.getName(), *result});
+    defineVariable(node.getName(), *result);
+    return result;
+  }
+  ValueType visitTypeAlias(const TypeAliasNode &node) override {
+    auto result = std::make_unique<TypeAliasNode>(
+        node.getName(), visitExplicitType(*node.getType(), node.getMetadata()),
+        modifyMetadata(node, std::make_unique<VoidType>()));
+    defineVariable(node.getName(), *result);
     return result;
   }
 
 private:
   std::vector<std::map<std::string, const AstNode &>> symbolTable;
   std::vector<const FunctionDefinitionNode *> parentFunctions;
+
+  void defineVariable(std::string name, const AstNode &astNode) {
+    if (symbolTable.back().contains(name)) {
+      errors.push_back(PyriteError("Variable " + name + " is already defined",
+                                   astNode.getMetadata()));
+    }
+    symbolTable.back().insert({std::move(name), astNode});
+  }
 };
 
 std::unique_ptr<AstNode> typeCheck(const AstNode &ast) {
