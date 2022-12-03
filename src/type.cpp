@@ -480,8 +480,18 @@ void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &valueAstNode,
                                   const UnaryExpressionNode &unaryExpression) {
   UnaryOperator op = unaryExpression.getOp();
   const Type *valueType = &type;
-  removeReference(*valueType, valueAstNode);
-  valueType = &valueAstNode->getValueType();
+  if (!isIncrementOrDecrement(op)) {
+    removeReference(*valueType, valueAstNode);
+    valueType = &valueAstNode->getValueType();
+  } else {
+    if (valueType->getTypeClass() != TypeClass::REFERENCE) {
+      errors.push_back(PyriteError("Invalid operand for unary operator: " +
+                                       typeToString(*valueType),
+                                   unaryExpression.getMetadata()));
+    }
+    valueType =
+        &static_cast<const ReferenceType *>(valueType)->getReferencedType();
+  }
   if (valueType->getTypeClass() == TypeClass::INTEGER) {
     const auto &integer = static_cast<const IntegerType &>(*valueType);
     if (op == UnaryOperator::NEGATE && !integer.getSigned()) {

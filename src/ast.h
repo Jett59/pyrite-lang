@@ -464,6 +464,17 @@ enum class UnaryOperator {
   PREFIX_INCREMENT,
   PREFIX_DECREMENT,
 };
+static inline bool isIncrementOrDecrement(UnaryOperator op) {
+  switch (op) {
+  case UnaryOperator::POSTFIX_INCREMENT:
+  case UnaryOperator::POSTFIX_DECREMENT:
+  case UnaryOperator::PREFIX_INCREMENT:
+  case UnaryOperator::PREFIX_DECREMENT:
+    return true;
+  default:
+    return false;
+  }
+}
 static inline bool isPrefixUnaryOperator(UnaryOperator op) {
   return op == UnaryOperator::NEGATE || op == UnaryOperator::LOGICAL_NOT ||
          op == UnaryOperator::BITWISE_NOT ||

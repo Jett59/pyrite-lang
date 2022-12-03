@@ -513,6 +513,13 @@ public:
   ValueType visitUnaryExpression(const UnaryExpressionNode &node) override {
     auto operand = visit(*node.getOperand());
     convertTypesForUnaryOperator(operand, operand->getValueType(), node);
+    if (isIncrementOrDecrement(node.getOp())) {
+      if (operand->getValueType().getTypeClass() != TypeClass::REFERENCE) {
+        errors.push_back(PyriteError("Increment/decrement operator must be "
+                                     "applied to a reference",
+                                     node.getMetadata()));
+      }
+    }
     return std::make_unique<UnaryExpressionNode>(
         node.getOp(), std::move(operand),
         modifyMetadata(node, cloneType(operand->getValueType())));
