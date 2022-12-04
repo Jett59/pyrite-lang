@@ -1,6 +1,6 @@
 #!/bin/sh
 
-BUILD_DIR=${1:-build}
+BUILD_DIR=${BUILD_DIR:-build}
 
 if [ ! -d $BUILD_DIR ]; then
     echo "The build directory does not exist.  Please run CMake and try again." >&2
@@ -19,16 +19,16 @@ if [ ! -f $PYRITEC ]; then
     fi
 fi
 
-EXAMPLES_DIR=${2:-examples}
+EXAMPLES_DIR=${EXAMPLES_DIR:-examples}
 
 if [ ! -d $EXAMPLES_DIR ]; then
     echo "The examples directory does not exist. Please ensure it exists." >&2
     exit 1
 fi
 
-RT_C=${3:-src/rt.c}
+RUNTIME_FILE=${RUNTIME_FILE:-src/rt.c}
 
-if [ ! -f $RT_C ]; then
+if [ ! -f $RUNTIME_FILE ]; then
     echo "The runtime source file does not exist. Please ensure it exists." >&2
     exit 1
 fi
@@ -48,9 +48,9 @@ for example in $EXAMPLES_DIR/*; do
         exit 1
     fi
     echo "Linking $example"
-    $CC -o $example/main $example/main.o $RT_C
+    $CC -o $example/main $example/main.o $RUNTIME_FILE
     if [ $? -ne 0 ]; then
-        echo "The example $example failed to compile with the runtime." >&2
+        echo "The example $example failed to link." >&2
         exit 1
     fi
     echo "Running $example"
