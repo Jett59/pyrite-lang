@@ -582,7 +582,7 @@ public:
               name, modifyMetadata(node, cloneType(definition.getValueType())));
         } else {
           // TODO: implement this case (overload list).
-          assert(false);
+          throw std::runtime_error("Overload list not implemented");
         }
       }
     }
@@ -831,6 +831,8 @@ private:
     std::variant<const AstNode *, OverloadList> value;
 
     SymbolTableEntry(const AstNode &astNode) : value(&astNode) {}
+    SymbolTableEntry(OverloadList overloadList)
+        : value(std::move(overloadList)) {}
 
     bool isAstNode() const {
       return std::holds_alternative<const AstNode *>(value);
@@ -853,8 +855,27 @@ private:
 
   void defineVariable(std::string name, const AstNode &astNode) {
     if (symbolTable.back().contains(name)) {
-      errors.push_back(
-          PyriteError(name + " is already defined", astNode.getMetadata()));
+      auto &entry = symbolTable.back().at(name);
+      if ((entry.isOverloadList() || entry.getAstNode().getNodeType() ==
+                                         AstNodeType::FUNCTION_DEFINITION) &&
+          astNode.getNodeType() == AstNodeType::FUNCTION_DEFINITION) {
+        const auto &functionDefinitionNode =
+            static_cast<const FunctionDefinitionNode &>(astNode);
+        if (functionDefinitionNode.getCExported()) {
+          errors.push_back(PyriteError("Cannot overload a C-exported function",
+                                       astNode.getMetadata()));
+        }
+        if (entry.isOverloadList()) {
+          entry.getOverloadList().functions.push_back(&functionDefinitionNode);
+        } else {
+          const auto &originalFunction =
+              static_cast<const FunctionDefinitionNode &>(entry.getAstNode());
+          entry = OverloadList{{&originalFunction, &functionDefinitionNode}};
+        }
+      } else {
+        errors.push_back(
+            PyriteError(name + " is already defined", astNode.getMetadata()));
+      }
     }
     symbolTable.back().insert({std::move(name), astNode});
   }

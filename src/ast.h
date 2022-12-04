@@ -218,7 +218,7 @@ private:
   std::unique_ptr<Type> returnType;
   std::vector<NameAndType> parameters;
   std::unique_ptr<AstNode> body;
-  bool cExported;
+  bool cExported = false;
   std::vector<std::string> attributes;
 
   void parseAttributes();
