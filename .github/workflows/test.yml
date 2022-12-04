@@ -16,6 +16,9 @@ jobs:
       - name: set up environment
         uses: ./.github/actions/setup-environment/
       
+      - name: create build directory
+        run: mkdir -p build
+      
       - name: configure with CMake
         working-directory: ./build
         run: cmake ..
