@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  test-examples:
     timeout-minutes: 5
     runs-on: ubuntu-22.04
     steps:
