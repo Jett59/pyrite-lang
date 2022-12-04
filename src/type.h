@@ -1,6 +1,7 @@
 #ifndef PYRITE_TYPE_H
 #define PYRITE_TYPE_H
 
+#include "helper.h"
 #include <cstddef>
 #include <map>
 #include <memory>
@@ -26,6 +27,7 @@ enum class TypeClass {
   IDENTIFIED,
   ANY,
   AUTO,
+  OVERLOADED_FUNCTION, // Shouldn't appear pas the type checker
 };
 
 // We have to forward-declare these because they are used in the type visitor.
@@ -46,6 +48,7 @@ class EnumType;
 class IdentifiedType;
 class AnyType;
 class AutoType;
+class OverloadedFunctionType;
 
 class TypeVisitor {
 public:
@@ -66,6 +69,7 @@ public:
   virtual void visit(const IdentifiedType &) = 0;
   virtual void visit(const AnyType &) = 0;
   virtual void visit(const AutoType &) = 0;
+  virtual void visit(const OverloadedFunctionType &) = 0;
 };
 
 class Type {
@@ -295,6 +299,20 @@ public:
 
   void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 };
+class OverloadedFunctionType : public Type {
+public:
+  OverloadedFunctionType(std::vector<std::unique_ptr<FunctionType>> options)
+      : Type(TypeClass::OVERLOADED_FUNCTION), options(std::move(options)) {}
+
+  const std::vector<std::unique_ptr<FunctionType>> &getOptions() const {
+    return options;
+  }
+
+  void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
+
+private:
+  std::vector<std::unique_ptr<FunctionType>> options;
+};
 
 // Templated prefix so it doesn't conflict with the alias.
 template <typename TemplatedValueType>
@@ -311,48 +329,29 @@ public:
     return visitAll(std::move(result), type);
   }
 
-  virtual ValueType visitVoid(const VoidType &type) = 0;
-  void visit(const VoidType &type) override { result = visitVoid(type); }
-  virtual ValueType visitInteger(const IntegerType &type) = 0;
-  void visit(const IntegerType &type) override { result = visitInteger(type); }
-  virtual ValueType visitFloat(const FloatType &type) = 0;
-  void visit(const FloatType &type) override { result = visitFloat(type); }
-  virtual ValueType visitBoolean(const BooleanType &type) = 0;
-  void visit(const BooleanType &type) override { result = visitBoolean(type); }
-  virtual ValueType visitChar(const CharType &type) = 0;
-  void visit(const CharType &type) override { result = visitChar(type); }
-  virtual ValueType visitRawArray(const RawArrayType &type) = 0;
-  void visit(const RawArrayType &type) override {
-    result = visitRawArray(type);
-  }
-  virtual ValueType visitArray(const ArrayType &type) = 0;
-  void visit(const ArrayType &type) override { result = visitArray(type); }
-  virtual ValueType visitReference(const ReferenceType &type) = 0;
-  void visit(const ReferenceType &type) override {
-    result = visitReference(type);
-  }
-  virtual ValueType visitFunction(const FunctionType &type) = 0;
-  void visit(const FunctionType &type) override {
-    result = visitFunction(type);
-  }
-  virtual ValueType visitStruct(const StructType &type) = 0;
-  void visit(const StructType &type) override { result = visitStruct(type); }
-  virtual ValueType visitUnion(const UnionType &type) = 0;
-  void visit(const UnionType &type) override { result = visitUnion(type); }
-  virtual ValueType visitRawUnion(const RawUnionType &type) = 0;
-  void visit(const RawUnionType &type) override {
-    result = visitRawUnion(type);
-  }
-  virtual ValueType visitEnum(const EnumType &type) = 0;
-  void visit(const EnumType &type) override { result = visitEnum(type); }
-  virtual ValueType visitIdentified(const IdentifiedType &type) = 0;
-  void visit(const IdentifiedType &type) override {
-    result = visitIdentified(type);
-  }
-  virtual ValueType visitAny(const AnyType &type) = 0;
-  void visit(const AnyType &type) override { result = visitAny(type); }
-  virtual ValueType visitAuto(const AutoType &type) = 0;
-  void visit(const AutoType &type) override { result = visitAuto(type); }
+#define IMPLEMENT_VISIT(TYPE)                                                  \
+  virtual ValueType visit##TYPE(const TYPE##Type &type) = 0;                   \
+  void visit(const TYPE##Type &type) override { result = visit##TYPE(type); }
+
+  IMPLEMENT_VISIT(Void)
+  IMPLEMENT_VISIT(Integer)
+  IMPLEMENT_VISIT(Float)
+  IMPLEMENT_VISIT(Boolean)
+  IMPLEMENT_VISIT(Char)
+  IMPLEMENT_VISIT(Array)
+  IMPLEMENT_VISIT(RawArray)
+  IMPLEMENT_VISIT(Reference)
+  IMPLEMENT_VISIT(Function)
+  IMPLEMENT_VISIT(Struct)
+  IMPLEMENT_VISIT(RawUnion)
+  IMPLEMENT_VISIT(Union)
+  IMPLEMENT_VISIT(Enum)
+  IMPLEMENT_VISIT(Identified)
+  IMPLEMENT_VISIT(Any)
+  IMPLEMENT_VISIT(Auto)
+  IMPLEMENT_VISIT(OverloadedFunction)
+
+#undef IMPLEMENT_VISIT
 
 private:
   ValueType result;
@@ -433,6 +432,15 @@ public:
   ValueType visitAuto(const AutoType &type) override {
     return std::make_unique<AutoType>();
   }
+  ValueType
+  visitOverloadedFunction(const OverloadedFunctionType &type) override {
+    std::vector<std::unique_ptr<FunctionType>> options;
+    for (const auto &option : type.getOptions()) {
+      auto newOption = staticCast<FunctionType>(visitFunction(*option));
+      options.push_back(std::move(newOption));
+    }
+    return std::make_unique<OverloadedFunctionType>(std::move(options));
+  }
 };
 static_assert(!std::is_abstract_v<PartialTypeToTypeTransformVisitor>,
               "PartialTypeToTypeTransformVisitor doesn't implement all the "
@@ -455,8 +463,9 @@ static inline const Type &removeReference(const Type &type) {
   }
 }
 
-void convertTypesForAssignment(std::unique_ptr<AstNode> &rhsAstNode,
-                               const Type &lhs, const Type &rhs);
+bool convertTypesForAssignment(std::unique_ptr<AstNode> &rhsAstNode,
+                               const Type &lhs, const Type &rhs,
+                               bool emitErrors = true);
 void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
                                    std::unique_ptr<AstNode> &rhsAstNode,
                                    const Type &lhs, const Type &rhs,

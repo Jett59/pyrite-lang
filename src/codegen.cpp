@@ -126,6 +126,10 @@ class CodegenAstVisitor : public AstTransformerVisitor<Value *> {
     ValueType visitAuto(const AutoType &) override {
       throw std::runtime_error("Auto type not supported in code generator");
     }
+    ValueType visitOverloadedFunction(const OverloadedFunctionType &) override {
+      throw std::runtime_error(
+          "Overloaded function type not supported in code generator");
+    }
 
     LLVMContext &context;
     DataLayout dataLayout;

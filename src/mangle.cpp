@@ -78,15 +78,30 @@ public:
   }
   std::string visitAny(const AnyType &) override { return "y"; }
   std::string visitAuto(const AutoType &) override { return "t"; }
+  std::string
+  visitOverloadedFunction(const OverloadedFunctionType &type) override {
+    std::string result = "o";
+    for (const auto &overload : type.getOptions()) {
+      result += visitFunction(*overload);
+    }
+    result += "E";
+    return result;
+  }
 };
 
-std::string mangle(const FunctionDefinitionNode &function) {
+std::string mangle(const FunctionDefinitionNode &definition) {
+  return mangle(definition.getName(),
+                static_cast<const FunctionType &>(
+                    removeReference(definition.getValueType())));
+}
+
+std::string mangle(const std::string &name, const FunctionType &type) {
   std::string result = "_P";
-  result += std::to_string(function.getName().size()) + function.getName();
+  result += std::to_string(name.size()) + name;
   TypeNameMangler mangler;
-  result += mangler.visit(*function.getReturnType());
-  for (const auto &param : function.getParameters()) {
-    result += mangler.visit(*param.type);
+  result += mangler.visit(type.getReturnType());
+  for (const auto &param : type.getParameters()) {
+    result += mangler.visit(*param);
   }
   return result;
 }

@@ -101,6 +101,10 @@ public:
   }
   std::string visitAny(const AnyType &type) override { return "any"; }
   std::string visitAuto(const AutoType &type) override { return "auto"; }
+  std::string
+  visitOverloadedFunction(const OverloadedFunctionType &type) override {
+    return "<unresolved overload>";
+  }
 };
 
 std::string typeToString(const Type &type) {
@@ -272,6 +276,26 @@ public:
   }
   bool visitAuto(const AutoType &type) override {
     return other.getTypeClass() == TypeClass::AUTO;
+  }
+  bool visitOverloadedFunction(const OverloadedFunctionType &type) override {
+    if (other.getTypeClass() != TypeClass::OVERLOADED_FUNCTION) {
+      return false;
+    } else {
+      const OverloadedFunctionType &otherOverloadedFunction =
+          static_cast<const OverloadedFunctionType &>(other);
+      if (type.getOptions().size() !=
+          otherOverloadedFunction.getOptions().size()) {
+        return false;
+      } else {
+        for (size_t i = 0; i < type.getOptions().size(); i++) {
+          if (!TypesEqualTransformer{*otherOverloadedFunction.getOptions()[i]}
+                   .visitFunction(*type.getOptions()[i])) {
+            return false;
+          }
+        }
+        return true;
+      }
+    }
   }
 
 private:
@@ -469,8 +493,9 @@ void removeReference(const Type &type, std::unique_ptr<AstNode> &astNode) {
   }
 }
 
-void convertTypesForAssignment(std::unique_ptr<AstNode> &rhsAstNode,
-                               const Type &lhs, const Type &rhs) {
+bool convertTypesForAssignment(std::unique_ptr<AstNode> &rhsAstNode,
+                               const Type &lhs, const Type &rhs,
+                               bool emitErrors) {
   auto lhsType = &lhs;
   auto rhsType = &rhs;
   if (lhsType->getTypeClass() != TypeClass::REFERENCE &&
@@ -478,8 +503,7 @@ void convertTypesForAssignment(std::unique_ptr<AstNode> &rhsAstNode,
     removeReference(*rhsType, rhsAstNode);
     rhsType = &rhsAstNode->getValueType();
   }
-  emitCast(*rhsType, *lhsType, rhsAstNode);
-  rhsType = &rhsAstNode->getValueType();
+  return emitCast(*rhsType, *lhsType, rhsAstNode, emitErrors);
 }
 void convertTypesForBinaryOperator(std::unique_ptr<AstNode> &lhsAstNode,
                                    std::unique_ptr<AstNode> &rhsAstNode,

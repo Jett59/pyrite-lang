@@ -6,6 +6,7 @@
 
 namespace pyrite {
 std::string mangle(const FunctionDefinitionNode &function);
-}
+std::string mangle(const std::string &name, const FunctionType &type);
+} // namespace pyrite
 
 #endif

@@ -441,7 +441,7 @@ public:
                                                      std::move(parameterTypes)),
                       true)));
     symbolTable.pop_back();
-    defineVariable(node.getName(), *result);
+    defineFunction(node.getName(), *result);
     return result;
   }
   ValueType visitIntegerLiteral(const IntegerLiteralNode &node) override {
@@ -581,8 +581,23 @@ public:
           return std::make_unique<VariableReferenceNode>(
               name, modifyMetadata(node, cloneType(definition.getValueType())));
         } else {
-          // TODO: implement this case (overload list).
-          throw std::runtime_error("Overload list not implemented");
+          const auto &overloads = symbol.getOverloadList().functions;
+          if (overloads.size() == 1) {
+            return std::make_unique<VariableReferenceNode>(
+                name, modifyMetadata(
+                          node, cloneType(overloads.front()->getValueType())));
+          } else {
+            std::vector<std::unique_ptr<FunctionType>> overloadTypes;
+            overloadTypes.reserve(overloads.size());
+            for (const auto &overload : overloads) {
+              overloadTypes.push_back(staticCast<FunctionType>(
+                  cloneType(removeReference(overload->getValueType()))));
+            }
+            return std::make_unique<VariableReferenceNode>(
+                name,
+                modifyMetadata(node, std::make_unique<OverloadedFunctionType>(
+                                         std::move(overloadTypes))));
+          }
         }
       }
     }
@@ -595,6 +610,57 @@ public:
     std::vector<std::unique_ptr<AstNode>> newArguments;
     for (auto &argument : node.getArguments()) {
       newArguments.push_back(visit(*argument));
+    }
+    if (newFunction->getValueType().getTypeClass() ==
+        TypeClass::OVERLOADED_FUNCTION) {
+      if (newFunction->getNodeType() != AstNodeType::VARIABLE_REFERENCE) {
+        errors.push_back(PyriteError(
+            "Overloaded function must be called directly", node.getMetadata()));
+      } else {
+        const auto &overloads = static_cast<const OverloadedFunctionType &>(
+                                    newFunction->getValueType())
+                                    .getOptions();
+        std::vector<std::unique_ptr<FunctionType>> matchingOverloads;
+        std::vector<std::vector<std::unique_ptr<AstNode>>> matchingArguments;
+        for (const auto &overload : overloads) {
+          if (overload->getParameters().size() == newArguments.size()) {
+            bool matches = true;
+            std::vector<std::unique_ptr<AstNode>> convertedArguments;
+            for (size_t i = 0; i < newArguments.size(); ++i) {
+              std::unique_ptr<AstNode> convertedArgument =
+                  cloneAst(*newArguments[i]);
+              if (!convertTypesForAssignment(
+                      convertedArgument, newArguments[i]->getValueType(),
+                      *overload->getParameters()[i], false)) {
+                matches = false;
+                break;
+              } else {
+                convertedArguments.push_back(std::move(convertedArgument));
+              }
+            }
+            if (matches) {
+              matchingOverloads.push_back(
+                  staticCast<FunctionType>(cloneType(*overload)));
+              matchingArguments.push_back(std::move(convertedArguments));
+            }
+          }
+        }
+        if (matchingOverloads.size() == 0) {
+          errors.push_back(
+              PyriteError{"No matching overload found", node.getMetadata()});
+        } else if (matchingOverloads.size() > 1) {
+          errors.push_back(
+              PyriteError{"Ambiguous function call", node.getMetadata()});
+        } else {
+          const auto &variableReference =
+              static_cast<const VariableReferenceNode &>(*newFunction);
+          newArguments = std::move(matchingArguments.front());
+          std::string mangledName =
+              mangle(variableReference.getName(), *matchingOverloads.front());
+          newFunction = visitVariableReference(
+              VariableReferenceNode{mangledName, cloneMetadata(*newFunction)});
+        }
+      }
     }
     const auto &functionValueType = newFunction->getValueType();
     if (functionValueType.getTypeClass() != TypeClass::REFERENCE) {
@@ -855,29 +921,34 @@ private:
 
   void defineVariable(std::string name, const AstNode &astNode) {
     if (symbolTable.back().contains(name)) {
-      auto &entry = symbolTable.back().at(name);
-      if ((entry.isOverloadList() || entry.getAstNode().getNodeType() ==
-                                         AstNodeType::FUNCTION_DEFINITION) &&
-          astNode.getNodeType() == AstNodeType::FUNCTION_DEFINITION) {
-        const auto &functionDefinitionNode =
-            static_cast<const FunctionDefinitionNode &>(astNode);
-        if (functionDefinitionNode.getCExported()) {
-          errors.push_back(PyriteError("Cannot overload a C-exported function",
-                                       astNode.getMetadata()));
-        }
-        if (entry.isOverloadList()) {
-          entry.getOverloadList().functions.push_back(&functionDefinitionNode);
-        } else {
-          const auto &originalFunction =
-              static_cast<const FunctionDefinitionNode &>(entry.getAstNode());
-          entry = OverloadList{{&originalFunction, &functionDefinitionNode}};
-        }
-      } else {
-        errors.push_back(
-            PyriteError(name + " is already defined", astNode.getMetadata()));
-      }
+      errors.push_back(
+          PyriteError(name + " is already defined", astNode.getMetadata()));
     }
     symbolTable.back().insert({std::move(name), astNode});
+  }
+  void defineFunction(std::string name,
+                      const FunctionDefinitionNode &definition) {
+    // C-exported functions are not allowed to be overloaded
+    if (definition.getCExported()) {
+      defineVariable(std::move(name), definition); // Same logic applies
+    } else {
+      // There should always be an entry for the mangled name to allow for
+      // lookup by variable references which are re-visited by the overload
+      // resolution process.
+      defineVariable(mangle(definition), definition);
+      if (symbolTable.back().contains(name)) {
+        auto &entry = symbolTable.back().at(name);
+        if (entry.isAstNode()) {
+          errors.push_back(PyriteError(name + " is already defined",
+                                       entry.getAstNode().getMetadata()));
+        } else {
+          entry.getOverloadList().functions.push_back(&definition);
+        }
+      } else {
+        symbolTable.back().insert(
+            {std::move(name), OverloadList{{&definition}}});
+      }
+    }
   }
 };
 
