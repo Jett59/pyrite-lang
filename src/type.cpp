@@ -404,7 +404,9 @@ static bool emitCast(const Type &from, const Type &to,
              to.getTypeClass() == TypeClass::REFERENCE) {
     const ReferenceType &referenceToType =
         static_cast<const ReferenceType &>(to);
-    if (emitCast(from, referenceToType.getReferencedType(), astNode, false)) {
+    // Temporary variables are only allowed to contain constants.
+    if (referenceToType.getConstant() &&
+        emitCast(from, referenceToType.getReferencedType(), astNode, false)) {
       astNode = createTemporaryVariable(std::move(astNode));
       typesEqual = true;
     }
