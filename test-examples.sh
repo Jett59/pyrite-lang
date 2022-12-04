@@ -35,34 +35,37 @@ fi
 
 CC=${CC:-clang}
 
-for example in $EXAMPLES_DIR/*; do
+EXAMPLES_TO_TEST=${@:-$(ls $EXAMPLES_DIR)}
+
+for example in $EXAMPLES_TO_TEST; do
+example_dir=$EXAMPLES_DIR/$example
     # There should be a file (main.pyrite) and possibly an output.txt file
-    if [ ! -f $example/main.pyrite ]; then
+    if [ ! -f $example_dir/main.pyrite ]; then
         echo "The example $example does not have a main.pyrite file." >&2
         exit 1
     fi
     echo "Compiling $example"
-    $PYRITEC $example/main.pyrite
+    $PYRITEC $example_dir/main.pyrite
     if [ $? -ne 0 ]; then
         echo "The example $example failed to compile." >&2
         exit 1
     fi
     echo "Linking $example"
-    $CC -o $example/main $example/main.o $RUNTIME_FILE
+    $CC -o $example_dir/main $example_dir/main.o $RUNTIME_FILE
     if [ $? -ne 0 ]; then
         echo "The example $example failed to link." >&2
         exit 1
     fi
     echo "Running $example"
-    EXAMPLE_OUTPUT=`$example/main`
+    EXAMPLE_OUTPUT=`$example_dir/main`
     if [ $? -ne 0 ]; then
         echo "The example $example failed to run." >&2
         echo "Output:" >&2
     echo "$EXAMPLE_OUTPUT" >&2
         exit 1
     fi
-    if [ -f $example/output.txt ]; then
-        EXPECTED_OUTPUT=`cat $example/output.txt`
+    if [ -f $example_dir/output.txt ]; then
+        EXPECTED_OUTPUT=`cat $example_dir/output.txt`
         if [ "$EXAMPLE_OUTPUT" != "$EXPECTED_OUTPUT" ]; then
             echo "The example $example did not produce the expected output." >&2
             echo "Expected: $EXPECTED_OUTPUT" >&2
@@ -70,8 +73,8 @@ for example in $EXAMPLES_DIR/*; do
             exit 1
         fi
         else
-            echo "Output:"
-            echo "$EXAMPLE_OUTPUT"
+            # Save it for later (to verify that it doesn't change).
+            echo "$EXAMPLE_OUTPUT" > $example_dir/output.txt
     fi
     echo "Passed $example"
 done
