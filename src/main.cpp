@@ -121,7 +121,6 @@ int main(int argc, const char **argv) {
       Parser parser(lexer, argv[0], &ast);
       parser.parse();
       ast = typeCheck(*ast);
-      std::cout << astToString(*ast) << std::endl;
       if (errors.size() > 0) {
         for (const auto &error : errors) {
           std::cerr << error.getMessage() << std::endl;
