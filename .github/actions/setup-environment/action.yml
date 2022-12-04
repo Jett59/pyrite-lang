@@ -4,6 +4,7 @@ name: 'set up environment'
 description: 'Set up the environment for compiling Pyrite'
 runs:
   using: "composite"
+  shell: bash
   steps:
     - name: uninstall old versions of llvm
       run: |
