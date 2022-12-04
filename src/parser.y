@@ -131,22 +131,22 @@ definitions: /* empty */ {
 
 definition:
 "let" type IDENTIFIER "=" expression ";" {
-    $$ = std::make_unique<VariableDefinitionNode>($2, $3, $5, false, createMetadata(@$));
+    $$ = std::make_unique<VariableDefinitionNode>($2, $3, $5, false, createMetadata(@3));
 }
 | "mut" type IDENTIFIER "=" expression ";" {
-    $$ = std::make_unique<VariableDefinitionNode>($2, $3, $5, true, createMetadata(@$));
+    $$ = std::make_unique<VariableDefinitionNode>($2, $3, $5, true, createMetadata(@3));
 }
 | "fn" IDENTIFIER "(" name-and-type-list ")" "->" type block-statement {
-    $$ = std::make_unique<FunctionDefinitionNode>($2, $4, $7, $8, std::vector<std::string>{}, createMetadata(@$));
+    $$ = std::make_unique<FunctionDefinitionNode>($2, $4, $7, $8, std::vector<std::string>{}, createMetadata(@2));
 }
 | "fn" "[" identifier-list "]" IDENTIFIER "(" name-and-type-list ")" "->" type block-statement {
-    $$ = std::make_unique<FunctionDefinitionNode>($5, $7, $10, $11, $3, createMetadata(@$));
+    $$ = std::make_unique<FunctionDefinitionNode>($5, $7, $10, $11, $3, createMetadata(@3));
 }
 | "type" IDENTIFIER "=" type ";" {
-    $$ = std::make_unique<TypeAliasNode>($2, $4, createMetadata(@$));
+    $$ = std::make_unique<TypeAliasNode>($2, $4, createMetadata(@2));
 }
 | "c_extern" "fn" IDENTIFIER "(" name-and-type-list ")" "->" type ";" {
-    $$ = std::make_unique<ExternalFunctionNode>($3, $5, $8, createMetadata(@$));
+    $$ = std::make_unique<ExternalFunctionNode>($3, $5, $8, createMetadata(@3));
 }
 
 statement:
@@ -154,24 +154,24 @@ definition
 | block-statement
 | expression ";"
 | "return" expression ";" {
-    $$ = std::make_unique<ReturnStatementNode>($2, createMetadata(@$));
+    $$ = std::make_unique<ReturnStatementNode>($2, createMetadata(@1));
 }
 | "return" ";" {
-    $$ = std::make_unique<ReturnStatementNode>(std::nullopt, createMetadata(@$));
+    $$ = std::make_unique<ReturnStatementNode>(std::nullopt, createMetadata(@1));
 }
-| if-statement {$$ = $1;}
+| if-statement
 | "while" expression block-statement {
-    $$ = std::make_unique<WhileStatementNode>($2, $3, createMetadata(@$));
+    $$ = std::make_unique<WhileStatementNode>($2, $3, createMetadata(@1));
 }
 
 if-statement: "if" expression block-statement {
-    $$ = std::make_unique<IfStatementNode>($2, $3, nullptr, createMetadata(@$));
+    $$ = std::make_unique<IfStatementNode>($2, $3, nullptr, createMetadata(@1));
 }
-if-statement: "if" expression block-statement "else" block-statement {
-    $$ = std::make_unique<IfStatementNode>($2, $3, $5, createMetadata(@$));
+| "if" expression block-statement "else" block-statement {
+    $$ = std::make_unique<IfStatementNode>($2, $3, $5, createMetadata(@1));
 }
 | "if" expression block-statement "else" if-statement {
-    $$ = std::make_unique<IfStatementNode>($2, $3, $5, createMetadata(@$));
+    $$ = std::make_unique<IfStatementNode>($2, $3, $5, createMetadata(@1));
 }
 
 block-statement: "{" statement-list "}" {
@@ -339,10 +339,10 @@ INTEGER_LITERAL {
     $$ = std::move(node);
 }
 | expression "(" expression-list ")" {
-    $$ = std::make_unique<FunctionCallNode>($1, $3, createMetadata(@$));
+    $$ = std::make_unique<FunctionCallNode>($1, $3, createMetadata(@2));
 }
 | expression "[" expression "]" {
-    $$ = std::make_unique<ArrayIndexNode>($1, $3, createMetadata(@$));
+    $$ = std::make_unique<ArrayIndexNode>($1, $3, createMetadata(@2));
 }
 | "[" expression-list "]" {
     $$ = std::make_unique<ArrayLiteralNode>($2, createMetadata(@$));
@@ -351,61 +351,61 @@ INTEGER_LITERAL {
     $$ = std::make_unique<StructLiteralNode>($2, createMetadata(@$));
 }
 | expression "+" expression {
-    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::ADD, $1, $3, createMetadata(@$));
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::ADD, $1, $3, createMetadata(@2));
 }
 | expression "-" expression {
-    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::SUBTRACT, $1, $3, createMetadata(@$));
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::SUBTRACT, $1, $3, createMetadata(@2));
 }
 | expression "*" expression {
-    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::MULTIPLY, $1, $3, createMetadata(@$));
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::MULTIPLY, $1, $3, createMetadata(@2));
 }
 | expression "/" expression {
-    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::DIVIDE, $1, $3, createMetadata(@$));
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::DIVIDE, $1, $3, createMetadata(@2));
 }
 | expression "%" expression {
-    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::MODULO, $1, $3, createMetadata(@$));
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::MODULO, $1, $3, createMetadata(@2));
 }
 | expression "==" expression {
-    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::EQUAL, $1, $3, createMetadata(@$));
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::EQUAL, $1, $3, createMetadata(@2));
 }
 | expression "!=" expression {
-    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::NOT_EQUAL, $1, $3, createMetadata(@$));
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::NOT_EQUAL, $1, $3, createMetadata(@2));
 }
 | expression "<" expression {
-    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::LESS_THAN, $1, $3, createMetadata(@$));
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::LESS_THAN, $1, $3, createMetadata(@2));
 }
 | expression ">" expression {
-    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::GREATER_THAN, $1, $3, createMetadata(@$));
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::GREATER_THAN, $1, $3, createMetadata(@2));
 }
 | expression "<=" expression {
-    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::LESS_THAN_OR_EQUAL, $1, $3, createMetadata(@$));
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::LESS_THAN_OR_EQUAL, $1, $3, createMetadata(@2));
 }
 | expression ">=" expression {
-    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::GREATER_THAN_OR_EQUAL, $1, $3, createMetadata(@$));
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::GREATER_THAN_OR_EQUAL, $1, $3, createMetadata(@2));
 }
 | expression "&&" expression {
-    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::LOGICAL_AND, $1, $3, createMetadata(@$));
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::LOGICAL_AND, $1, $3, createMetadata(@2));
 }
 | expression "||" expression {
-    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::LOGICAL_OR, $1, $3, createMetadata(@$));
+    $$ = std::make_unique<BinaryExpressionNode>(BinaryOperator::LOGICAL_OR, $1, $3, createMetadata(@2));
 }
 | "++" expression {
-    $$ = std::make_unique<UnaryExpressionNode>(UnaryOperator::PREFIX_INCREMENT, $2, createMetadata(@$));
+    $$ = std::make_unique<UnaryExpressionNode>(UnaryOperator::PREFIX_INCREMENT, $2, createMetadata(@1));
 }
 | "--" expression {
-    $$ = std::make_unique<UnaryExpressionNode>(UnaryOperator::PREFIX_DECREMENT, $2, createMetadata(@$));
+    $$ = std::make_unique<UnaryExpressionNode>(UnaryOperator::PREFIX_DECREMENT, $2, createMetadata(@1));
 }
 | expression "++" {
-    $$ = std::make_unique<UnaryExpressionNode>(UnaryOperator::POSTFIX_INCREMENT, $1, createMetadata(@$));
+    $$ = std::make_unique<UnaryExpressionNode>(UnaryOperator::POSTFIX_INCREMENT, $1, createMetadata(@2));
 }
 | expression "--" {
-    $$ = std::make_unique<UnaryExpressionNode>(UnaryOperator::POSTFIX_DECREMENT, $1, createMetadata(@$));
+    $$ = std::make_unique<UnaryExpressionNode>(UnaryOperator::POSTFIX_DECREMENT, $1, createMetadata(@2));
 }
 | expression "=" expression {
-    $$ = std::make_unique<AssignmentNode>($1, $3, std::nullopt, createMetadata(@$));
+    $$ = std::make_unique<AssignmentNode>($1, $3, std::nullopt, createMetadata(@2));
 }
 | "-" expression %prec UNARY_MINUS {
-    $$ = std::make_unique<UnaryExpressionNode>(UnaryOperator::NEGATE, $2, createMetadata(@$));
+    $$ = std::make_unique<UnaryExpressionNode>(UnaryOperator::NEGATE, $2, createMetadata(@1));
 }
 
 expression-list: /* empty */ {
