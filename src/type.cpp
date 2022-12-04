@@ -337,7 +337,6 @@ static bool emitCast(const Type &from, const Type &to,
   bool typesEqual = false;
   bool hasErrors = false;
   if (typeEquals(to, from)) {
-    canCast = true;
     typesEqual = true;
   } else if (to.getTypeClass() == TypeClass::ANY) {
     canCast = true;

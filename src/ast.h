@@ -211,6 +211,16 @@ public:
   bool getCExported() const { return cExported; }
   const std::vector<std::string> getAttributes() const { return attributes; }
 
+  /**
+   * @brief Set the name of this function
+   *
+   * This is used by the type checker to rename the function for mangling
+   * purposes.
+   *
+   * @param newName
+   */
+  void setName(std::string newName) { name = std::move(newName); }
+
   void accept(AstVisitor &visitor) const override { visitor.visit(*this); }
 
 private:

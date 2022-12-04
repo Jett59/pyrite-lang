@@ -90,9 +90,13 @@ public:
 };
 
 std::string mangle(const FunctionDefinitionNode &definition) {
-  return mangle(definition.getName(),
-                static_cast<const FunctionType &>(
-                    removeReference(definition.getValueType())));
+  if (!definition.getCExported()) {
+    return mangle(definition.getName(),
+                  static_cast<const FunctionType &>(
+                      removeReference(definition.getValueType())));
+  } else {
+    return definition.getName();
+  }
 }
 
 std::string mangle(const std::string &name, const FunctionType &type) {

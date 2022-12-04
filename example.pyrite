@@ -1,5 +1,12 @@
-c_extern fn println(&[i8] str)-> void;
+c_extern fn printSLn(&[i8] str)-> void;
 c_extern fn printILn(i64 n)-> void;
+
+fn println(&[i8] str)-> void {
+    printSLn(str);
+}
+fn println(i32 i)-> void {
+    printILn(i);
+}
 
 fn [c_export] main()-> i32 {
     mut i32 i = 0;
@@ -11,7 +18,7 @@ fn [c_export] main()-> i32 {
         }else if i % 5 == 0 {
             println("buzz");
         }else {
-            printILn(i);
+            println(i);
         }
         i++;
     }

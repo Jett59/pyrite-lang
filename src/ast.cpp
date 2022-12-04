@@ -442,6 +442,8 @@ public:
                       true)));
     symbolTable.pop_back();
     defineFunction(node.getName(), *result);
+    result->setName(mangle(
+        *result)); // Lets the rest of the processing forget about mangling.
     return result;
   }
   ValueType visitIntegerLiteral(const IntegerLiteralNode &node) override {
@@ -630,8 +632,8 @@ public:
               std::unique_ptr<AstNode> convertedArgument =
                   cloneAst(*newArguments[i]);
               if (!convertTypesForAssignment(
-                      convertedArgument, newArguments[i]->getValueType(),
-                      *overload->getParameters()[i], false)) {
+                      convertedArgument, *overload->getParameters()[i],
+                      newArguments[i]->getValueType(), false)) {
                 matches = false;
                 break;
               } else {
