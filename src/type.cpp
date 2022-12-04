@@ -377,7 +377,7 @@ static bool emitCast(const Type &from, const Type &to,
              to.getTypeClass() == TypeClass::REFERENCE) {
     const ReferenceType &referenceToType =
         static_cast<const ReferenceType &>(to);
-    if (typeEquals(referenceToType.getReferencedType(), from)) {
+    if (emitCast(from, referenceToType.getReferencedType(), astNode, true)) {
       astNode = createTemporaryVariable(std::move(astNode));
       typesEqual = true;
     }
