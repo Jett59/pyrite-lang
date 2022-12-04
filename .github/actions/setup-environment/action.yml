@@ -1,0 +1,20 @@
+# Composite action:
+# Ref: https://docs.github.com/en/actions/creating-actions/creating-a-composite-action
+name: 'set up environment'
+description: 'Set up the environment for compiling Pyrite'
+runs:
+  using: "composite"
+  steps:
+    - name: uninstall old versions of llvm
+      run: |
+        sudo apt-get remove -y llvm-13 llvm-13-dev llvm-12 llvm-12-dev # What I've found on there.
+
+    - name: install latest llvm
+      run: |
+        sudo apt-get install -y llvm llvm-dev
+
+    - name: print dependency versions
+      run: |
+        bison -V
+        gcc --version
+        llvm-config --version
