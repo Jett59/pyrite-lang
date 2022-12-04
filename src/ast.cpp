@@ -586,8 +586,9 @@ public:
           const auto &overloads = symbol.getOverloadList().functions;
           if (overloads.size() == 1) {
             return std::make_unique<VariableReferenceNode>(
-                name, modifyMetadata(
-                          node, cloneType(overloads.front()->getValueType())));
+                overloads.front()->getName(),
+                modifyMetadata(node,
+                               cloneType(overloads.front()->getValueType())));
           } else {
             std::vector<std::unique_ptr<FunctionType>> overloadTypes;
             overloadTypes.reserve(overloads.size());

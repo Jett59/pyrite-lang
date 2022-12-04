@@ -1,0 +1,27 @@
+name: test
+
+on:
+  push:
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  test-examples:
+    timeout-minutes: 5
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: set up environment
+        uses: ./.github/actions/setup-environment/
+      
+      - name: create build directory
+        run: mkdir -p build
+      
+      - name: configure with CMake
+        working-directory: ./build
+        run: cmake ..
+
+      - name: run example tests
+        run: ./test-examples.sh

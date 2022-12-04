@@ -13,7 +13,6 @@ name: "CodeQL"
 
 on:
   push:
-  pull_request:
   
   schedule:
     - cron: '38 1 * * 5'
@@ -38,19 +37,8 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: uninstall old versions of llvm
-      run: |
-        sudo apt-get remove -y llvm-13 llvm-13-dev llvm-12 llvm-12-dev # What I've found on there.
-
-    - name: install latest llvm
-      run: |
-        sudo apt-get install -y llvm llvm-dev
-
-    - name: print dependency versions
-      run: |
-        bison -V
-        gcc --version
-        llvm-config --version
+    - name: set up environment
+      uses: ./.github/actions/setup-environment/
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
