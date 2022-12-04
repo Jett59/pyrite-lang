@@ -431,6 +431,7 @@ public:
                                      node.getMetadata()));
       }
     }
+    parentFunctions.pop_back();
     auto result = std::make_unique<FunctionDefinitionNode>(
         node.getName(), std::move(newParameters),
         visitExplicitType(*node.getReturnType(), node.getMetadata()),
@@ -441,9 +442,14 @@ public:
                                                      std::move(parameterTypes)),
                       true)));
     symbolTable.pop_back();
-    defineFunction(node.getName(), *result);
-    result->setName(mangle(
-        *result)); // Lets the rest of the processing forget about mangling.
+    if (parentFunctions.size() > 0) {
+      errors.push_back(PyriteError("Nested functions are not currently allowed",
+                                   node.getMetadata()));
+    } else {
+      defineFunction(node.getName(), *result);
+      result->setName(mangle(
+          *result)); // Lets the rest of the processing forget about mangling.
+    }
     return result;
   }
   ValueType visitIntegerLiteral(const IntegerLiteralNode &node) override {
