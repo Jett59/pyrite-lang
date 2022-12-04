@@ -116,6 +116,10 @@ class TypesEqualTransformer : public TypeTransformVisitor<bool> {
 public:
   TypesEqualTransformer(const Type &other) : other(other) {}
 
+  bool visitAll(bool value, const Type &type) override {
+    return value && type.getName() == other.getName();
+  }
+
   bool visitVoid(const VoidType &type) override {
     return other.getTypeClass() == TypeClass::VOID;
   }
