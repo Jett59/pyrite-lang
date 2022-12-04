@@ -1,0 +1,10 @@
+c_extern fn printSLn(&[i8] str)-> void;
+
+fn println(&[i8] str)-> void {
+    printSLn(str);
+}
+
+fn [c_export] main()-> i32 {
+    println("Hello, World!");
+    return 0;
+}

@@ -55,10 +55,10 @@ for example in $EXAMPLES_DIR/*; do
     fi
     echo "Running $example"
     EXAMPLE_OUTPUT=`$example/main`
-    echo "Output:"
-    echo "$EXAMPLE_OUTPUT"
     if [ $? -ne 0 ]; then
         echo "The example $example failed to run." >&2
+        echo "Output:" >&2
+    echo "$EXAMPLE_OUTPUT" >&2
         exit 1
     fi
     if [ -f $example/output.txt ]; then
@@ -69,6 +69,9 @@ for example in $EXAMPLES_DIR/*; do
             echo "Got: $EXAMPLE_OUTPUT" >&2
             exit 1
         fi
+        else
+            echo "Output:"
+            echo "$EXAMPLE_OUTPUT"
     fi
     echo "Passed $example"
 done
