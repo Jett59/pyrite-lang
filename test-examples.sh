@@ -47,7 +47,7 @@ for example in $EXAMPLES_DIR/*; do
         echo "The example $example failed to compile." >&2
         exit 1
     fi
-    echo "Compiling $example with runtime"
+    echo "Linking $example"
     $CC -o $example/main $example/main.o $RT_C
     if [ $? -ne 0 ]; then
         echo "The example $example failed to compile with the runtime." >&2
