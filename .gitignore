@@ -10,5 +10,12 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 
+*.o
+*.bc
+*.ll
+*.S
+
 build/
 .vscode/
+
+examples/*/main
