@@ -108,7 +108,7 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %left "*" "/" "%"
 %left "|" "^" "&"
 
-%precedence UNARY_MINUS
+%left UNARY_MINUS "!"
 %left "++" "--"
 
 %left "(" "["
@@ -406,6 +406,9 @@ INTEGER_LITERAL {
 }
 | "-" expression %prec UNARY_MINUS {
     $$ = std::make_unique<UnaryExpressionNode>(UnaryOperator::NEGATE, $2, createMetadata(@1));
+}
+| "!" expression {
+    $$ = std::make_unique<UnaryExpressionNode>(UnaryOperator::LOGICAL_NOT, $2, createMetadata(@1));
 }
 
 expression-list: /* empty */ {

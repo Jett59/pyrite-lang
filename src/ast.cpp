@@ -1,5 +1,6 @@
 #include "ast.h"
 #include "error.h"
+#include "escapes.h"
 #include "mangle.h"
 #include <atomic>
 #include <limits>
@@ -463,8 +464,17 @@ public:
         node.getValue(), modifyMetadata(node, std::make_unique<FloatType>(64)));
   }
   ValueType visitStringLiteral(const StringLiteralNode &node) override {
+    std::string translatedEscapeValue;
+    try {
+      translatedEscapeValue = translateEscapes(node.getValue());
+    } catch (const std::runtime_error &e) {
+      // It throws runtime errors because it doesn't have the information to
+      // compose a PyriteError
+      errors.push_back(PyriteError(e.what(), node.getMetadata()));
+      translatedEscapeValue = node.getValue();
+    }
     return std::make_unique<StringLiteralNode>(
-        node.getValue(),
+        translatedEscapeValue,
         modifyMetadata(node, std::make_unique<ArrayType>(
                                  std::make_unique<IntegerType>(8, true))));
   }

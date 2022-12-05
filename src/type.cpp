@@ -563,13 +563,28 @@ void convertTypesForUnaryOperator(std::unique_ptr<AstNode> &valueAstNode,
     valueType =
         &static_cast<const ReferenceType *>(valueType)->getReferencedType();
   }
+  if (op == UnaryOperator::LOGICAL_NOT) {
+    if (valueType->getTypeClass() != TypeClass::BOOLEAN) {
+      errors.push_back(PyriteError("Invalid operand for unary operator: " +
+                                       typeToString(*valueType),
+                                   unaryExpression.getMetadata()));
+    }
+  }
   if (valueType->getTypeClass() == TypeClass::INTEGER) {
     const auto &integer = static_cast<const IntegerType &>(*valueType);
     if (op == UnaryOperator::NEGATE && !integer.getSigned()) {
       errors.push_back(PyriteError("Can't negate unsigned integer",
                                    valueAstNode->getMetadata()));
     }
-  } else if (valueType->getTypeClass() != TypeClass::FLOAT) {
+  } else if (valueType->getTypeClass() == TypeClass::FLOAT) {
+    // Nothing to do here
+  } else if (valueType->getTypeClass() == TypeClass::BOOLEAN) {
+    if (op != UnaryOperator::LOGICAL_NOT) {
+      errors.push_back(PyriteError("Invalid operand for unary operator: " +
+                                       typeToString(*valueType),
+                                   unaryExpression.getMetadata()));
+    }
+  } else {
     errors.push_back(PyriteError("Invalid operand for unary operator: " +
                                      typeToString(*valueType),
                                  valueAstNode->getMetadata()));

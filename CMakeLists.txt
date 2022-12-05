@@ -31,6 +31,7 @@ add_library(pyrite
     src/type.cpp
     src/ast.cpp
     src/mangle.cpp
+    src/escapes.cpp
     src/codegen.cpp
     src/optimizations.cpp
 )

@@ -7,7 +7,5 @@ struct String {
   const char *data;
 };
 
-void printSLn(struct String *str) {
-  printf("%.*s\n", (int)str->size, str->data);
-}
-void printILn(int64_t value) { printf("%" PRId64 "\n", value); }
+void printS(struct String *str) { printf("%.*s", (int)str->size, str->data); }
+void printI(int64_t value) { printf("%" PRId64, value); }

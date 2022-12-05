@@ -1,7 +1,8 @@
-c_extern fn printSLn(&[i8] str)-> void;
+c_extern fn printS(&[i8] str)-> void;
 
 fn println(&[i8] str)-> void {
-    printSLn(str);
+    printS(str);
+    printS("\n");
 }
 
 fn [c_export] main()-> i32 {
