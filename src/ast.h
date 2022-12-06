@@ -1005,19 +1005,26 @@ public:
                                                 node.getMetadata().clone());
   }
   ValueType visitIfStatement(const IfStatementNode &node) override {
+    auto newCondition = visit(*node.getCondition());
+    auto newThenStatement = visit(*node.getThenStatement());
+    auto newElseStatement =
+        node.getElseStatement() ? visit(*node.getElseStatement()) : nullptr;
     return std::make_unique<IfStatementNode>(
-        visit(*node.getCondition()), visit(*node.getThenStatement()),
-        node.getElseStatement() ? visit(*node.getElseStatement()) : nullptr,
-        node.getMetadata().clone());
+        std::move(newCondition), std::move(newThenStatement),
+        std::move(newElseStatement), node.getMetadata().clone());
   }
   ValueType visitWhileStatement(const WhileStatementNode &node) override {
-    return std::make_unique<WhileStatementNode>(visit(*node.getCondition()),
-                                                visit(*node.getBody()),
+    auto newCondition = visit(*node.getCondition());
+    auto newBody = visit(*node.getBody());
+    return std::make_unique<WhileStatementNode>(std::move(newCondition),
+                                                std::move(newBody),
                                                 node.getMetadata().clone());
   }
   ValueType visitBinaryExpression(const BinaryExpressionNode &node) override {
+    auto newLeft = visit(*node.getLeft());
+    auto newRight = visit(*node.getRight());
     return std::make_unique<BinaryExpressionNode>(
-        node.getOp(), visit(*node.getLeft()), visit(*node.getRight()),
+        node.getOp(), std::move(newLeft), std::move(newRight),
         node.getMetadata().clone());
   }
   ValueType visitUnaryExpression(const UnaryExpressionNode &node) override {
@@ -1029,18 +1036,21 @@ public:
                                                    node.getMetadata().clone());
   }
   ValueType visitFunctionCall(const FunctionCallNode &node) override {
+    auto newFunction = visit(*node.getFunction());
     std::vector<ValueType> newArguments;
     for (const auto &argument : node.getArguments()) {
       newArguments.push_back(visit(*argument));
     }
-    return std::make_unique<FunctionCallNode>(visit(*node.getFunction()),
+    return std::make_unique<FunctionCallNode>(std::move(newFunction),
                                               std::move(newArguments),
                                               node.getMetadata().clone());
   }
   ValueType visitAssignment(const AssignmentNode &node) override {
+    auto newLhs = visit(*node.getLhs());
+    auto newRhs = visit(*node.getRhs());
     return std::make_unique<AssignmentNode>(
-        visit(*node.getLhs()), visit(*node.getRhs()),
-        node.getAdditionalOperator(), node.getMetadata().clone());
+        std::move(newLhs), std::move(newRhs), node.getAdditionalOperator(),
+        node.getMetadata().clone());
   }
   ValueType visitDereference(const DereferenceNode &node) override {
     return std::make_unique<DereferenceNode>(visit(*node.getValue()),
@@ -1076,14 +1086,16 @@ public:
                                                node.getMetadata().clone());
   }
   ValueType visitArrayIndex(const ArrayIndexNode &node) override {
-    return std::make_unique<ArrayIndexNode>(visit(*node.getArray()),
-                                            visit(*node.getIndex()),
-                                            node.getMetadata().clone());
+    auto newArray = visit(*node.getArray());
+    auto newIndex = visit(*node.getIndex());
+    return std::make_unique<ArrayIndexNode>(
+        std::move(newArray), std::move(newIndex), node.getMetadata().clone());
   }
   ValueType visitRawArrayIndex(const RawArrayIndexNode &node) override {
-    return std::make_unique<RawArrayIndexNode>(visit(*node.getArray()),
-                                               visit(*node.getIndex()),
-                                               node.getMetadata().clone());
+    auto newArray = visit(*node.getArray());
+    auto newIndex = visit(*node.getIndex());
+    return std::make_unique<RawArrayIndexNode>(
+        std::move(newArray), std::move(newIndex), node.getMetadata().clone());
   }
   ValueType visitStructMember(const StructMemberNode &node) override {
     return std::make_unique<StructMemberNode>(visit(*node.getStructValue()),
@@ -1091,9 +1103,12 @@ public:
                                               node.getMetadata().clone());
   }
   ValueType visitAssert(const AssertNode &node) override {
+    auto newLhs = visit(*node.getLhs());
+    auto newRhs = visit(*node.getRhs());
+    auto newPanic = visit(*node.getPanic());
     return std::make_unique<AssertNode>(
-        visit(*node.getLhs()), visit(*node.getRhs()), node.getUseLhs(),
-        node.getOp(), visit(*node.getPanic()), node.getMetadata().clone());
+        std::move(newLhs), std::move(newRhs), node.getUseLhs(), node.getOp(),
+        std::move(newPanic), node.getMetadata().clone());
   }
   ValueType visitExternalFunction(const ExternalFunctionNode &node) override {
     std::vector<NameAndType> newParameters;

@@ -1018,7 +1018,8 @@ public:
 
   ValueType visitVariableReference(const VariableReferenceNode &node) override {
     if (isMoved(node.getName())) {
-      errors.push_back(PyriteError{"Variable is moved", node.getMetadata()});
+      errors.push_back(
+          PyriteError{node.getName() + " is moved", node.getMetadata()});
     }
     return PartialAstToAstTransformerVisitor::visitVariableReference(node);
   }
