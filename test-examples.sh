@@ -7,7 +7,12 @@ if [ ! -d $BUILD_DIR ]; then
     exit 1
 fi
 
+set -e
+
 cmake --build $BUILD_DIR --config release
+
+# We want to report our own errors.
+set +e
 
 # Most of the time the "pyritec" executable will be in $BUILD_DIR/pyrite. However in Visual Studio it is placed in $BUILD_DIR/Release/pyritec.exe
 PYRITEC=$BUILD_DIR/pyritec
