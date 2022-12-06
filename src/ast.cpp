@@ -994,6 +994,31 @@ public:
     return result;
   }
 
+  ValueType visitIfStatement(const IfStatementNode &node) override {
+    // This is different since things can be moved in the then statement and are
+    // still available in the else statement (and vice versa).
+    // The algorithm we use here is to save the states after the then and else
+    // statements and then find the sum of them and use this as the final move
+    // state. We also will find out which ones are only moved in one of the
+    // branches so that we may place destructor calls in the other branch.
+    auto newCondition = visit(*node.getCondition());
+    auto originalMovedVariables = movedVariables;
+    auto newThenStatement = visit(*node.getThenStatement());
+    auto thenMovedVariables = std::move(movedVariables);
+    std::unique_ptr<AstNode> newElseStatement = nullptr;
+    movedVariables = originalMovedVariables;
+    if (node.getElseStatement()) {
+      newElseStatement = visit(*node.getElseStatement());
+      auto elseMovedVariables = std::move(movedVariables);
+      movedVariables = mergeVariables(thenMovedVariables, elseMovedVariables);
+    }
+    // TODO: Add destructor calls for variables that are only moved in one of
+    // the branches.
+    return std::make_unique<IfStatementNode>(
+        std::move(newCondition), std::move(newThenStatement),
+        std::move(newElseStatement), cloneMetadata(node));
+  }
+
   ValueType visitDereference(const DereferenceNode &node) override {
     ValueType result =
         PartialAstToAstTransformerVisitor::visitDereference(node);
@@ -1080,6 +1105,24 @@ private:
     default:
       return false;
     }
+  }
+
+  /**
+   * @brief merge two sets of variables
+   *
+   * @param a the first set
+   * @param b the second (note that the two sets must be the same size)
+   * @return std::vector<std::set<std::string>>
+   */
+  std::vector<std::set<std::string>>
+  mergeVariables(const std::vector<std::set<std::string>> &a,
+                 const std::vector<std::set<std::string>> &b) {
+    std::vector<std::set<std::string>> result;
+    for (size_t i = 0; i < a.size(); i++) {
+      result.push_back(a[i]);
+      result[i].insert(b[i].begin(), b[i].end());
+    }
+    return result;
   }
 };
 
