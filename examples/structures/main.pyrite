@@ -21,11 +21,12 @@ type MyStruct = {[i8] str, i64 n};
 fn printMyStruct(MyStruct theStruct)-> void {
     print(theStruct.str);
     print(": ");
-    print(theStruct.n);
-    println("!");
+    println(theStruct.n);
 }
 
 fn [c_export] main()-> i32 {
-    printMyStruct({str: "Hello, World!", n: 33});
+    let MyStruct myStruct = {str: "Hello, World!", n: 32};
+    myStruct.n++;
+    printMyStruct(myStruct);
     return 0;
 }

@@ -995,6 +995,8 @@ public:
   }
 
   ValueType visitDereference(const DereferenceNode &node) override {
+    ValueType result =
+        PartialAstToAstTransformerVisitor::visitDereference(node);
     if (!isCopyable(node.getValueType())) {
       // This is where movement happens.
       const auto &value = *node.getValue();
@@ -1011,7 +1013,7 @@ public:
                                      node.getMetadata()});
       }
     }
-    return PartialAstToAstTransformerVisitor::visitDereference(node);
+    return result;
   }
 
   ValueType visitVariableReference(const VariableReferenceNode &node) override {
