@@ -5,6 +5,7 @@
 #include <atomic>
 #include <limits>
 #include <map>
+#include <set>
 #include <string>
 #include <variant>
 
@@ -867,9 +868,11 @@ public:
           std::move(newStruct), node.getMember(),
           modifyMetadata(node, std::make_unique<VoidType>()));
     }
+    auto memberReferenceType = std::make_unique<ReferenceType>(
+        cloneType(**memberType), structReferenceType.getConstant());
     return std::make_unique<StructMemberNode>(
         std::move(newStruct), node.getMember(),
-        modifyMetadata(node, cloneType(**memberType)));
+        modifyMetadata(node, std::move(memberReferenceType)));
   }
   ValueType visitAssert(const AssertNode &) override {
     throw std::runtime_error("Assert should not be in this stage of the AST");
@@ -974,6 +977,112 @@ private:
 std::unique_ptr<AstNode> typeCheck(const AstNode &ast) {
   TypeCheckTransformer transformer;
   return transformer.visit(ast);
+}
+
+class MoveAnalyzer : public PartialAstToAstTransformerVisitor {
+public:
+  ValueType visitCompilationUnit(const CompilationUnitNode &node) override {
+    createScope();
+    auto result = PartialAstToAstTransformerVisitor::visitCompilationUnit(node);
+    destroyScope();
+    return result;
+  }
+  ValueType visitBlockStatement(const BlockStatementNode &node) override {
+    createScope();
+    auto result = PartialAstToAstTransformerVisitor::visitBlockStatement(node);
+    destroyScope();
+    return result;
+  }
+
+  ValueType visitDereference(const DereferenceNode &node) override {
+    if (!isCopyable(node.getValueType())) {
+      // This is where movement happens.
+      const auto &value = *node.getValue();
+      AstNodeType valueNodeType = value.getNodeType();
+      switch (valueNodeType) {
+      case AstNodeType::VARIABLE_REFERENCE: {
+        const auto &variableReferenceNode =
+            static_cast<const VariableReferenceNode &>(value);
+        moveVariable(variableReferenceNode.getName());
+        break;
+      }
+      default:
+        errors.push_back(PyriteError{"Can't move out of this expression",
+                                     node.getMetadata()});
+      }
+    }
+    return PartialAstToAstTransformerVisitor::visitDereference(node);
+  }
+
+  ValueType visitVariableReference(const VariableReferenceNode &node) override {
+    if (isMoved(node.getName())) {
+      errors.push_back(PyriteError{"Variable is moved", node.getMetadata()});
+    }
+    return PartialAstToAstTransformerVisitor::visitVariableReference(node);
+  }
+
+  ValueType
+  visitVariableDefinition(const VariableDefinitionNode &node) override {
+    allVariables.back().insert(node.getName());
+    return PartialAstToAstTransformerVisitor::visitVariableDefinition(node);
+  }
+
+private:
+  std::vector<std::set<std::string>> movedVariables;
+  std::vector<std::set<std::string>> allVariables;
+
+  void createScope() {
+    movedVariables.push_back({});
+    allVariables.push_back({});
+  }
+  void destroyScope() {
+    movedVariables.pop_back();
+    allVariables.pop_back();
+  }
+
+  void moveVariable(const std::string &name) {
+    // We should add it to the right level of the table so that it remains
+    // "moved" until the end of its lifetime.
+    for (size_t i = allVariables.size(); i-- > 0;) {
+      if (allVariables[i].contains(name)) {
+        movedVariables[i].insert(name);
+        break;
+      }
+    }
+  }
+
+  bool isMoved(const std::string &name) {
+    // Go back through the "allVariables" list to ensure we don't give false
+    // positives from a moved variable which is obscured by a more recent
+    // definition.
+    for (size_t i = allVariables.size(); i-- > 0;) {
+      if (allVariables[i].contains(name)) {
+        return movedVariables[i].contains(name);
+      }
+    }
+    // Bearing in mind that functions aren't in the allVariables table, we
+    // should just return false here.
+    return false;
+  }
+
+  bool isCopyable(const Type &type) {
+    auto typeClass = type.getTypeClass();
+    switch (typeClass) {
+    case TypeClass::INTEGER:
+    case TypeClass::FLOAT:
+    case TypeClass::BOOLEAN:
+    case TypeClass::CHAR:
+    case TypeClass::ENUM:
+      return true;
+    default:
+      return false;
+    }
+  }
+};
+
+std::unique_ptr<AstNode> analyseMoves(const AstNode &ast) {
+  MoveAnalyzer moveAnalyzer;
+  return moveAnalyzer.visit(ast);
 }
 
 template <typename TypeVisitor>

@@ -439,22 +439,26 @@ static bool emitCast(const Type &from, const Type &to,
   } else if (to.getTypeClass() == TypeClass::STRUCT &&
              from.getTypeClass() == TypeClass::STRUCT) {
     if (astNode->getNodeType() == AstNodeType::STRUCT_LITERAL) {
+      std::cout << "Struct literal convertion being performed." << std::endl;
       const StructLiteralNode &structLiteral =
           static_cast<const StructLiteralNode &>(*astNode);
+      std::cout << "Starting with: " << astToString(structLiteral) << std::endl;
       const StructType &structToType = static_cast<const StructType &>(to);
       const StructType &structFromType = static_cast<const StructType &>(from);
       std::vector<std::pair<std::string, std::unique_ptr<AstNode>>> newValues;
       for (const auto &[name, originalValue] : structLiteral.getValues()) {
         // We have to duplicate the value here since emitCast modifies it.
-        std::unique_ptr<AstNode> value = cloneAst(*originalValue);
+        std::unique_ptr<AstNode> newValue = cloneAst(*originalValue);
         auto fromMemberType = structFromType.getMemberType(name);
         auto toMemberType = structToType.getMemberType(name);
+        std::cout << "From " << typeToString(**fromMemberType) << " to "
+                  << typeToString(**toMemberType) << std::endl;
         if (!fromMemberType || !toMemberType ||
-            !emitCast(**fromMemberType, **toMemberType, value, false)) {
+            !emitCast(**fromMemberType, **toMemberType, newValue, false)) {
           hasErrors = true;
           break;
         } else {
-          newValues.push_back({name, std::move(value)});
+          newValues.push_back({name, std::move(newValue)});
         }
       }
       if (!hasErrors) {
@@ -468,6 +472,7 @@ static bool emitCast(const Type &from, const Type &to,
         astNode = std::make_unique<StructLiteralNode>(
             std::move(newValues), astNode->getMetadata().clone());
         astNode->setValueType(cloneType(structToType));
+        std::cout << "Becomes: " << astToString(*astNode) << std::endl;
         typesEqual = true;
       }
     }

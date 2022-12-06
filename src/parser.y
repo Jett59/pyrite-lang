@@ -111,7 +111,7 @@ pyrite::AstMetadata createMetadata(const pyrite::location &location) {
 %left UNARY_MINUS "!"
 %left "++" "--"
 
-%left "(" "["
+%left "(" "[" "."
 
 %%
 
@@ -346,6 +346,9 @@ INTEGER_LITERAL {
 }
 | "[" expression-list "]" {
     $$ = std::make_unique<ArrayLiteralNode>($2, createMetadata(@$));
+}
+| expression "." IDENTIFIER {
+    $$ = std::make_unique<StructMemberNode>($1, $3, createMetadata(@2));
 }
 | "{" identifier-and-expression-list "}" {
     $$ = std::make_unique<StructLiteralNode>($2, createMetadata(@$));

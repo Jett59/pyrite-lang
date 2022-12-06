@@ -226,9 +226,9 @@ public:
   void accept(TypeVisitor &visitor) const override { visitor.visit(*this); }
 
   std::optional<const Type *> getMemberType(const std::string &name) const {
-    for (const auto &[name, type] : fields) {
-      if (name == name) {
-        return type.get();
+    for (const auto &[memberName, memberType] : fields) {
+      if (memberName == name) {
+        return memberType.get();
       }
     }
     return std::nullopt;

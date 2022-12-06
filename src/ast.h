@@ -1117,9 +1117,20 @@ std::unique_ptr<AstNode> cloneAst(const AstNode &node);
 
 std::string astToString(const AstNode &);
 
-// Assigns types to expressions, checks them against the expected types, and
-// performs implicit conversions.
+/**
+ * @brief check types in the AST
+ *
+ * @note this actually does rather more than just checking types. It does
+ * transformations which change the types of expressions (I.E. implicit type
+ * convertions).
+ *
+ * @param ast
+ * @return std::unique_ptr<AstNode>
+ */
 std::unique_ptr<AstNode> typeCheck(const AstNode &ast);
+
+std::unique_ptr<AstNode> analyseMoves(const AstNode &ast);
+
 std::unique_ptr<AstNode> simplifyAst(const AstNode &ast);
 
 std::unique_ptr<VariableDefinitionNode>

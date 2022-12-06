@@ -1,0 +1,31 @@
+c_extern fn printS(&[i8] str)-> void;
+c_extern fn printI(i64 n)-> void;
+
+fn println(&[i8] str)-> void {
+    printS(str);
+    printS("\n");
+}
+fn println(i64 n)-> void {
+    printI(n);
+    printS("\n");
+}
+fn print(&[i8] str)-> void {
+    printS(str);
+}
+fn print(i64 n)-> void {
+    printI(n);
+}
+
+type MyStruct = {[i8] str, i64 n};
+
+fn printMyStruct(MyStruct theStruct)-> void {
+    print(theStruct.str);
+    print(": ");
+    print(theStruct.n);
+    println("!");
+}
+
+fn [c_export] main()-> i32 {
+    printMyStruct({str: "Hello, World!", n: 33});
+    return 0;
+}

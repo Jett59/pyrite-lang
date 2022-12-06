@@ -121,6 +121,7 @@ int main(int argc, const char **argv) {
       Parser parser(lexer, argv[0], &ast);
       parser.parse();
       ast = typeCheck(*ast);
+      ast = analyseMoves(*ast);
       if (errors.size() > 0) {
         for (const auto &error : errors) {
           std::cerr << error.getMessage() << std::endl;
@@ -153,7 +154,7 @@ int main(int argc, const char **argv) {
       std::cerr << "Error thrown:" << std::endl;
       std::cerr << exception.getMessage() << std::endl;
       return 1;
-    }catch (const std::exception &e) {
+    } catch (const std::exception &e) {
       std::cerr << "Error thrown:" << std::endl;
       std::cerr << e.what() << std::endl;
       return 1;
