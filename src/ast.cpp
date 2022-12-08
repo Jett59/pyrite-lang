@@ -1019,6 +1019,32 @@ public:
         std::move(newElseStatement), cloneMetadata(node));
   }
 
+  ValueType visitWhileStatement(const WhileStatementNode &node) override {
+    // Since the while statement may run any number of times (we can't reason
+    // about that) we have to ensure that the loop never moves out of the parent
+    // scope.
+    auto oldMovedVariables = movedVariables;
+    auto newCondition = visit(*node.getCondition());
+    auto newBody = visit(*node.getBody());
+    auto variablesMovedInLoop =
+        findDifference(oldMovedVariables, movedVariables);
+    bool anyVariablesMoved = false;
+    for (const auto &variableScope : variablesMovedInLoop) {
+      if (!variableScope.empty()) {
+        anyVariablesMoved = true;
+        break;
+      }
+    }
+    if (anyVariablesMoved) {
+      errors.push_back(
+          PyriteError{"May not move variables out of parent scope of loop",
+                      node.getMetadata()});
+    }
+    return std::make_unique<WhileStatementNode>(std::move(newCondition),
+                                                std::move(newBody),
+                                                node.getMetadata().clone());
+  }
+
   ValueType visitDereference(const DereferenceNode &node) override {
     ValueType result =
         PartialAstToAstTransformerVisitor::visitDereference(node);
@@ -1121,6 +1147,23 @@ private:
     for (size_t i = 0; i < a.size(); i++) {
       result.push_back(a[i]);
       result[i].insert(b[i].begin(), b[i].end());
+    }
+    return result;
+  }
+  std::vector<std::set<std::string>>
+  findDifference(const std::vector<std::set<std::string>> &oldValue,
+                 const std::vector<std::set<std::string>> &newValue) {
+    std::vector<std::set<std::string>> result;
+    for (size_t i = 0; i < oldValue.size(); i++) {
+      const auto &oldSet = oldValue[i];
+      const auto &newSet = newValue[i];
+      std::set<std::string> resultSet;
+      for (const auto &variable : newSet) {
+        if (!oldSet.contains(variable)) {
+          resultSet.insert(variable);
+        }
+      }
+      result.push_back(std::move(resultSet));
     }
     return result;
   }

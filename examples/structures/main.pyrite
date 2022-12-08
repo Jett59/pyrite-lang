@@ -32,5 +32,10 @@ fn [c_export] main()-> i32 {
         myStruct.n++;
         printMyStruct(myStruct);
     }
+    let MyStruct myStruct2 = {str: "Hi there", n: 75};
+    while myStruct2.n < 9 {
+        myStruct2.n--;
+    }
+    printMyStruct(myStruct2);
     return 0;
 }
