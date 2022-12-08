@@ -62,7 +62,7 @@ example_dir=$EXAMPLES_DIR/$example
         exit 1
     fi
     echo "Running $example"
-    EXAMPLE_OUTPUT=`$example_dir/main`
+    EXAMPLE_OUTPUT=`$example_dir/main | sed 's/\r$//'` # Remove carriage returns
     if [ $? -ne 0 ]; then
         echo "The example $example failed to run." >&2
         echo "Output:" >&2
