@@ -1048,7 +1048,10 @@ public:
   ValueType visitDereference(const DereferenceNode &node) override {
     ValueType result =
         PartialAstToAstTransformerVisitor::visitDereference(node);
-    if (!isCopyable(node.getValueType())) {
+    if (result->getValueType().getTypeClass() == TypeClass::FUNCTION) {
+      errors.push_back(PyriteError{"Can't move a value of function type",
+                                   node.getMetadata()});
+    } else if (!isCopyable(node.getValueType())) {
       // This is where movement happens.
       const auto &value = *node.getValue();
       AstNodeType valueNodeType = value.getNodeType();
@@ -1077,13 +1080,14 @@ public:
 
   ValueType
   visitVariableDefinition(const VariableDefinitionNode &node) override {
-    allVariables.back().insert(node.getName());
+    allVariables.back().insert({node.getName(), &node});
     return PartialAstToAstTransformerVisitor::visitVariableDefinition(node);
   }
 
 private:
   std::vector<std::set<std::string>> movedVariables;
-  std::vector<std::set<std::string>> allVariables;
+  std::vector<std::map<std::string, const VariableDefinitionNode *>>
+      allVariables;
 
   void createScope() {
     movedVariables.push_back({});
