@@ -994,6 +994,38 @@ public:
     return result;
   }
 
+  ValueType
+  visitFunctionDefinition(const FunctionDefinitionNode &node) override {
+    // We must block moving out of the global scope. We can't reason about the
+    // effects of accesses to global variables so we don't even try. Movement
+    // out of the global scope is illegal!
+    auto originalMovedVariables = movedVariables;
+    auto newBody = visit(*node.getBody());
+    auto variablesMovedInBody =
+        findDifference(originalMovedVariables, movedVariables);
+    // Going through all scopes at this point is the safest way. This way it
+    // should keep working even if we have nested functions or multiple
+    // compilation units or something.
+    for (const auto &variableScope : variablesMovedInBody) {
+      if (!variableScope.empty()) {
+        errors.push_back(PyriteError{"Can't move out of the global scope",
+                                     node.getMetadata()});
+        break;
+      }
+    }
+    // Unfortunately, we can't just call the partial visitor here, so we have to
+    // repeat ourselves.
+    // I copy-pasted this code.
+    std::vector<NameAndType> newParameters;
+    for (const auto &parameter : node.getParameters()) {
+      newParameters.push_back({parameter.name, visitType(*parameter.type)});
+    }
+    return std::make_unique<FunctionDefinitionNode>(
+        node.getName(), std::move(newParameters),
+        visitType(*node.getReturnType()), std::move(newBody),
+        node.getAttributes(), node.getMetadata().clone());
+  }
+
   ValueType visitIfStatement(const IfStatementNode &node) override {
     // This is different since things can be moved in the then statement and are
     // still available in the else statement (and vice versa).
