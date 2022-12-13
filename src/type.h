@@ -95,6 +95,12 @@ private:
 struct NameAndType {
   std::string name;
   std::unique_ptr<Type> type;
+
+  NameAndType(std::string name, std::unique_ptr<Type> type)
+      : name(std::move(name)), type(std::move(type)) {}
+
+  // Needed for the parser to default construct one of these.
+  NameAndType() = default;
 };
 
 class VoidType : public Type {

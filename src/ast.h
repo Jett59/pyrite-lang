@@ -191,6 +191,7 @@ private:
 class FunctionDefinitionNode : public AstNode {
 public:
   static constexpr const char *C_EXPORT_ATTRIBUTE = "c_export";
+  static constexpr const char *ON_DROP_ATTRIBUTE = "on_drop";
 
   FunctionDefinitionNode(std::string name, std::vector<NameAndType> parameters,
                          std::unique_ptr<Type> returnType,
@@ -209,6 +210,7 @@ public:
   const std::vector<NameAndType> &getParameters() const { return parameters; }
   const std::unique_ptr<AstNode> &getBody() const { return body; }
   bool getCExported() const { return cExported; }
+  bool getOnDrop() const { return onDrop; }
   const std::vector<std::string> getAttributes() const { return attributes; }
 
   /**
@@ -229,6 +231,7 @@ private:
   std::vector<NameAndType> parameters;
   std::unique_ptr<AstNode> body;
   bool cExported = false;
+  bool onDrop = false;
   std::vector<std::string> attributes;
 
   void parseAttributes();

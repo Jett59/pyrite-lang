@@ -453,6 +453,10 @@ public:
         return irBuilder.CreateLShr(left, right);
       }
     }
+    case BinaryOperator::LOGICAL_AND:
+    case BinaryOperator::LOGICAL_OR:
+      throw std::runtime_error(
+          "generateBinaryExpression doesn't currently support logical and/or");
     }
     throw std::runtime_error("Unknown binary operator");
   }
@@ -583,7 +587,7 @@ public:
     irBuilder.CreateStore(right, left);
     return left;
   }
-  ValueType visitDereference(const DereferenceNode &node) {
+  ValueType visitDereference(const DereferenceNode &node) override {
     return irBuilder.CreateLoad(getLLVMType(node.getValueType()),
                                 visit(*node.getValue()));
   }
@@ -709,7 +713,7 @@ public:
     irBuilder.SetInsertPoint(continueBlock);
     return node.getUseLhs() ? lhs : rhs;
   }
-  ValueType visitExternalFunction(const ExternalFunctionNode &node) {
+  ValueType visitExternalFunction(const ExternalFunctionNode &node) override {
     auto functionType = getLLVMType(removeReference(node.getValueType()));
     auto function = llvm::Function::Create(
         static_cast<llvm::FunctionType *>(functionType),

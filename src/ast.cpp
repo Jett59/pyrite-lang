@@ -14,6 +14,25 @@ void FunctionDefinitionNode::parseAttributes() {
   for (const auto &attribute : attributes) {
     if (attribute == C_EXPORT_ATTRIBUTE) {
       cExported = true;
+    } else if (attribute == ON_DROP_ATTRIBUTE) {
+      onDrop = true;
+      // These functions should take one non-reference parameter.
+      if (parameters.size() != 1) {
+        errors.push_back(PyriteError{
+            "On drop functions should take one non-reference parameter.",
+            getMetadata()});
+      }
+      if (parameters[0].type->getTypeClass() == TypeClass::REFERENCE) {
+        errors.push_back(PyriteError{
+            "On drop functions should take one non-reference parameter.",
+            getMetadata()});
+      }
+      // They should also always be called "drop".
+      if (name != "drop") {
+        errors.push_back(
+            PyriteError{"On drop functions should always be called \"drop\".",
+                        getMetadata()});
+      }
     } else {
       errors.push_back(
           PyriteError{"Unknown attribute: " + attribute, getMetadata()});
@@ -166,7 +185,7 @@ public:
     result += ")";
     return result;
   }
-  std::string visitAssignment(const AssignmentNode &node) {
+  std::string visitAssignment(const AssignmentNode &node) override {
     if (node.getAdditionalOperator()) {
       return possiblyAddParens(visit(*node.getLhs()),
                                node.getLhs()->getMetadata()) +
@@ -182,10 +201,10 @@ public:
                                node.getRhs()->getMetadata());
     }
   }
-  std::string visitDereference(const DereferenceNode &node) {
+  std::string visitDereference(const DereferenceNode &node) override {
     return "*" + possiblyAddParens(visit(*node.getValue()), node.getMetadata());
   }
-  std::string visitCast(const CastNode &node) {
+  std::string visitCast(const CastNode &node) override {
     return possiblyAddParens(visit(*node.getValue()), node.getMetadata()) +
            " as " + typeToString(*node.getType());
   }
@@ -237,7 +256,7 @@ public:
                              node.getStructValue()->getMetadata()) +
            "." + node.getMember();
   }
-  std::string visitAssert(const AssertNode &node) {
+  std::string visitAssert(const AssertNode &node) override {
     return "assert(" + visit(*node.getLhs()) + " " +
            binaryOperatorToString(node.getOp()) + " " + visit(*node.getRhs()) +
            ", " + (node.getUseLhs() ? "lhs" : "rhs") + ": " +
@@ -321,6 +340,10 @@ AstMetadata modifyMetadata(const AstNode &node, bool alwaysReturns) {
 AstMetadata cloneMetadata(const AstNode &node) {
   return node.getMetadata().clone();
 }
+
+struct OverloadList {
+  std::vector<const FunctionDefinitionNode *> functions;
+};
 
 class TypeCheckTransformer : public AstToAstTransformVisitor {
 public:
@@ -912,9 +935,6 @@ public:
   }
 
 private:
-  struct OverloadList {
-    std::vector<const FunctionDefinitionNode *> functions;
-  };
   struct SymbolTableEntry {
     std::variant<const AstNode *, OverloadList> value;
 
